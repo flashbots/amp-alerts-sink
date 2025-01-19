@@ -1,0 +1,1 @@
+# amp-alerts-sink
