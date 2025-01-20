@@ -89,19 +89,18 @@ func (ddb *dynamoDb) Set(
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
-	ddbItem := map[string]*dynamodb.AttributeValue{
-		ddbKeyNamespace: {S: aws.String(ddb.namespace)},
-		ddbKeyId:        {S: aws.String(key)},
-		ddbKeyValue:     {S: aws.String(value)},
-
-		ddbKeyExpireOn: {N: aws.String(fmt.Sprintf("%d",
-			time.Now().Add(expireIn).Unix(),
-		))},
-	}
-
 	input := &dynamodb.PutItemInput{
 		TableName: aws.String(ddb.name),
-		Item:      ddbItem,
+
+		Item: map[string]*dynamodb.AttributeValue{
+			ddbKeyNamespace: {S: aws.String(ddb.namespace)},
+			ddbKeyId:        {S: aws.String(key)},
+			ddbKeyValue:     {S: aws.String(value)},
+
+			ddbKeyExpireOn: {N: aws.String(fmt.Sprintf("%d",
+				time.Now().Add(expireIn).Unix(),
+			))},
+		},
 	}
 	output, err := ddb.cli.PutItemWithContext(ctx, input)
 
@@ -127,13 +126,12 @@ func (ddb *dynamoDb) Get(
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
-	key = ddb.namespace + "/" + key
-
 	input := &dynamodb.GetItemInput{
 		TableName: aws.String(ddb.name),
 
 		Key: map[string]*dynamodb.AttributeValue{
-			ddbKeyId: {S: aws.String(key)},
+			ddbKeyNamespace: {S: aws.String(ddb.namespace)},
+			ddbKeyId:        {S: aws.String(key)},
 		},
 	}
 	output, err := ddb.cli.GetItemWithContext(ctx, input)
