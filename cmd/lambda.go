@@ -74,16 +74,16 @@ func CommandLambda(cfg *config.Config) *cli.Command {
 		&cli.StringFlag{
 			Category:    categorySlack,
 			Destination: &cfg.Slack.Channel.Name,
-			EnvVars:     []string{envPrefix + envPrefixSlack + "NAME"},
-			Name:        cliPrefixSlack + "name",
+			EnvVars:     []string{envPrefix + envPrefixSlack + "CHANNEL_NAME"},
+			Name:        cliPrefixSlack + "channel-name",
 			Usage:       "slack channel `name` to publish alerts to",
 		},
 
 		&cli.StringFlag{
 			Category:    categorySlack,
 			Destination: &cfg.Slack.Channel.ID,
-			EnvVars:     []string{envPrefix + envPrefixSlack + "ID"},
-			Name:        cliPrefixSlack + "id",
+			EnvVars:     []string{envPrefix + envPrefixSlack + "CHANNEL_ID"},
+			Name:        cliPrefixSlack + "channel-id",
 			Usage:       "slack channel `ID` to publish alerts to",
 		},
 
