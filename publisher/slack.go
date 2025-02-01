@@ -1,5 +1,8 @@
 package publisher
 
+// TODO: switch to 'go tool' once 1.24 is released
+//go:generate mockgen -package mock_publisher -destination ../mock/publisher/slack.go -source slack.go SlackApi
+
 import (
 	"context"
 	"errors"

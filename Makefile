@@ -20,15 +20,7 @@ docker:
 
 .PHONY: mockgen
 mockgen:
-	@mockgen \
-			-destination mock/db/db.go \
-			-package mock_db \
-		github.com/flashbots/amp-alerts-sink/db DB
-
-	@mockgen \
-			-destination mock/publisher/slack.go \
-			-package mock_publisher \
-		github.com/flashbots/amp-alerts-sink/publisher SlackApi
+	@go generate ./...
 
 .PHONY: snapshot
 snapshot:

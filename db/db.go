@@ -1,5 +1,8 @@
 package db
 
+// TODO: switch to 'go tool' once 1.24 is released
+//go:generate mockgen -package mock_db -destination ../mock/db/db.go -source db.go DB
+
 import (
 	"context"
 	"errors"

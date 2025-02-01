@@ -8,10 +8,10 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.33.0
 	github.com/aws/aws-sdk-go-v2/config v1.29.1
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.34.13
-	github.com/golang/mock v1.6.0
 	github.com/slack-go/slack v0.15.0
 	github.com/stretchr/testify v1.9.0
 	github.com/urfave/cli/v2 v2.27.2
+	go.uber.org/mock v0.5.0
 	go.uber.org/zap v1.27.0
 )
 
