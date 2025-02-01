@@ -1,8 +1,9 @@
 package types
 
 import (
-	"fmt"
-	"hash/fnv"
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
 	"slices"
 )
 
@@ -13,60 +14,44 @@ type AlertmanagerAlert struct {
 	Status      string            `json:"status"`
 }
 
-// ThreadFingerprint computes the hash of alert's labels only.
-func (a AlertmanagerAlert) ThreadFingerprint() string {
-	sum := fnv.New64a()
+// IncidentDedupKey computes the hash of alert's labels only.
+func (a AlertmanagerAlert) IncidentDedupKey() string {
+	sum := sha256.New()
 
-	sortedLabels := make([]string, 0, len(a.Labels))
-	for l := range a.Labels {
-		sortedLabels = append(sortedLabels, l)
-	}
-	slices.Sort(sortedLabels)
-	for _, k := range sortedLabels {
-		sum.Write([]byte(k))
-		sum.Write([]byte{255})
-		sum.Write([]byte(a.Labels[k]))
-		sum.Write([]byte{255})
-	}
+	writeMap(sum, a.Labels)
+	writeString(sum, a.StartsAt)
 
-	sum.Write([]byte(a.StartsAt))
-	sum.Write([]byte{255})
-
-	return fmt.Sprintf("%016x", sum.Sum64())
+	return hex.EncodeToString(sum.Sum(nil))
 }
 
-// MessageFingerprint computes the hash of alert's labels and annotations.
-func (a AlertmanagerAlert) MessageFingerprint() string {
-	sum := fnv.New64a()
+// MessageDedupKey computes the hash of alert's labels and annotations.
+func (a AlertmanagerAlert) MessageDedupKey() string {
+	sum := sha256.New()
 
-	sortedAnnotations := make([]string, 0, len(a.Annotations))
-	for l := range a.Labels {
-		sortedAnnotations = append(sortedAnnotations, l)
-	}
-	slices.Sort(sortedAnnotations)
-	for _, k := range sortedAnnotations {
-		sum.Write([]byte(k))
-		sum.Write([]byte{255})
-		sum.Write([]byte(a.Annotations[k]))
-		sum.Write([]byte{255})
-	}
+	writeMap(sum, a.Annotations)
+	writeMap(sum, a.Labels)
+	writeString(sum, a.StartsAt)
+	writeString(sum, a.Status)
 
-	sortedLabels := make([]string, 0, len(a.Labels))
-	for l := range a.Labels {
-		sortedLabels = append(sortedLabels, l)
-	}
-	slices.Sort(sortedLabels)
-	for _, k := range sortedLabels {
-		sum.Write([]byte(k))
-		sum.Write([]byte{255})
-		sum.Write([]byte(a.Labels[k]))
-		sum.Write([]byte{255})
-	}
+	return hex.EncodeToString(sum.Sum(nil))
+}
 
-	sum.Write([]byte(a.StartsAt))
+// writeMap writes the map to hasher in a deterministic order.
+func writeMap(sum io.Writer, m map[string]string) {
+	sortedKeys := make([]string, 0, len(m))
+	for k := range m {
+		sortedKeys = append(sortedKeys, k)
+	}
+	slices.Sort(sortedKeys)
+
+	for _, k := range sortedKeys {
+		writeString(sum, k)
+		writeString(sum, m[k])
+	}
+}
+
+// writeString writes the string to hasher with non-printable delimiter.
+func writeString(sum io.Writer, s string) {
+	io.WriteString(sum, s)
 	sum.Write([]byte{255})
-	sum.Write([]byte(a.Status))
-	sum.Write([]byte{255})
-
-	return fmt.Sprintf("%016x", sum.Sum64())
 }

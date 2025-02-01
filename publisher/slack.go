@@ -1,7 +1,7 @@
 package publisher
 
 // TODO: switch to 'go tool' once 1.24 is released
-//go:generate mockgen -package mock_publisher -destination ../mock/publisher/slack.go -source slack.go SlackApi
+//go:generate mockgen -package mock_publisher -destination ../mock/publisher/slack.go -source slack.go -mock_names slackApi=Mock_slackApi slackApi
 
 import (
 	"context"
@@ -24,11 +24,11 @@ type slackChannel struct {
 	channelID   string
 	channelName string
 
-	cli SlackApi
+	cli slackApi
 	db  db.DB
 }
 
-type SlackApi interface {
+type slackApi interface {
 	AddReaction(name string, item slack.ItemRef) error
 	PostMessage(channelID string, options ...slack.MsgOption) (string, string, error)
 	RemoveReaction(name string, item slack.ItemRef) error
@@ -55,8 +55,8 @@ func (s *slackChannel) Publish(
 ) (err error) {
 	l := logutils.LoggerFromContext(ctx)
 
-	dbKeyThreadTS := source + "/" + s.channelName + "/" + alert.ThreadFingerprint()
-	dbKeyMessageTS := source + "/" + s.channelName + "/" + alert.MessageFingerprint()
+	dbKeyThreadTS := source + "/" + s.channelName + "/" + alert.IncidentDedupKey()
+	dbKeyMessageTS := source + "/" + s.channelName + "/" + alert.MessageDedupKey()
 
 	var messageTS, threadTS string
 

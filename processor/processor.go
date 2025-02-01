@@ -47,6 +47,10 @@ func New(cfg *config.Config) (*Processor, error) {
 		publishers = append(publishers, slack)
 	}
 
+	if cfg.PagerDuty.Enabled() {
+		publishers = append(publishers, publisher.NewPagerDuty(cfg.PagerDuty))
+	}
+
 	if len(publishers) == 0 {
 		return nil, ErrPublisherUndefined
 	}
@@ -87,8 +91,8 @@ func (p *Processor) processMessage(
 
 		// create alert-specific logger
 		l := logutils.LoggerFromContext(ctx).With(
-			zap.String("alert_fingerprint", alert.MessageFingerprint()),
-			zap.String("alert_labels_fingerprint", alert.ThreadFingerprint()),
+			zap.String("alert_fingerprint", alert.MessageDedupKey()),
+			zap.String("alert_labels_fingerprint", alert.IncidentDedupKey()),
 		)
 		ctx = logutils.ContextWithLogger(ctx, l)
 
