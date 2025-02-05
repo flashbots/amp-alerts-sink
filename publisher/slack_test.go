@@ -11,8 +11,8 @@ import (
 	mock_db "github.com/flashbots/amp-alerts-sink/mock/db"
 	mock_publisher "github.com/flashbots/amp-alerts-sink/mock/publisher"
 
-	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
 	slack_api "github.com/slack-go/slack"
 )
