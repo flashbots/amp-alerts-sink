@@ -18,11 +18,11 @@ const (
 	categoryDynamoDB  = "DYNAMO DB:"
 	categoryProcessor = "PROCESSOR:"
 	categorySlack     = "PUBLISHER SLACK:"
+	categoryPagerDuty = "PUBLISHER PAGERDUTY:"
 )
 
 var (
 	errProcessorInvalidLabelMatch    = errors.New("invalid label match (must be 'label=value')")
-	errSecretManagerMissingKey       = errors.New("secret manager misses key")
 	errSlackChannelIDNotConfigured   = errors.New("slack channel ID must be configured")
 	errSlackChannelNameNotConfigured = errors.New("slack channel name must be configured")
 )
@@ -31,12 +31,15 @@ func CommandLambda(cfg *config.Config) *cli.Command {
 	envPrefixDynamoDB := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(categoryDynamoDB, " ", "_"), ":", "")) + "_"
 	envPrefixProcessor := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(categoryProcessor, " ", "_"), ":", "")) + "_"
 	envPrefixSlack := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(categorySlack, " ", "_"), ":", "")) + "_"
+	envPrefixPagerDuty := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(categoryPagerDuty, " ", "_"), ":", "")) + "_"
 
 	cliPrefixDynamoDB := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(categoryDynamoDB, " ", "-"), ":", "")) + "-"
 	cliPrefixProcessor := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(categoryProcessor, " ", "-"), ":", "")) + "-"
 	cliPrefixSlack := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(categorySlack, " ", "-"), ":", "")) + "-"
+	cliPrefixPagerDuty := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(categoryPagerDuty, " ", "-"), ":", "")) + "-"
 
 	envSlackToken := envPrefix + envPrefixSlack + "TOKEN"
+	envPagerDutyIntegrationKey := envPrefix + envPrefixPagerDuty + "INTEGRATION_KEY"
 
 	rawProcessorIgnoreRules := &cli.StringSlice{}
 	rawProcessorMatchLabels := &cli.StringSlice{}
@@ -96,10 +99,21 @@ func CommandLambda(cfg *config.Config) *cli.Command {
 		},
 	}
 
+	flagsPagerDuty := []cli.Flag{
+		&cli.StringFlag{
+			Category:    categoryPagerDuty,
+			Destination: &cfg.PagerDuty.IntegrationKey,
+			EnvVars:     []string{envPagerDutyIntegrationKey},
+			Name:        cliPrefixPagerDuty + "integration-key",
+			Usage:       "pagerduty `integration key` to publish alerts to",
+		},
+	}
+
 	flags := slices.Concat(
 		flagsDB,
 		flagsProcessor,
 		flagsSlack,
+		flagsPagerDuty,
 	)
 
 	return &cli.Command{
@@ -108,6 +122,8 @@ func CommandLambda(cfg *config.Config) *cli.Command {
 		Flags: flags,
 
 		Before: func(_ *cli.Context) error {
+			var err error
+
 			if cfg.Slack.Token != "" {
 				if cfg.Slack.Channel.ID == "" {
 					return errSlackChannelIDNotConfigured
@@ -116,21 +132,16 @@ func CommandLambda(cfg *config.Config) *cli.Command {
 					return errSlackChannelNameNotConfigured
 				}
 
-				{ // read slack token from aws secret manager
-					if strings.HasPrefix(cfg.Slack.Token, "arn:aws:secretsmanager:") {
-						s, err := secret.AWS(cfg.Slack.Token)
-						if err != nil {
-							return err
-						}
-						slackToken, exists := s[envSlackToken]
-						if !exists {
-							return fmt.Errorf("%w: %s: %s",
-								errSecretManagerMissingKey, cfg.Slack.Token, envSlackToken,
-							)
-						}
-						cfg.Slack.Token = slackToken
-					}
+				cfg.Slack.Token, err = stringOrLoadFromSecretsmanager(cfg.Slack.Token, envSlackToken)
+				if err != nil {
+					return err
 				}
+			}
+
+			cfg.PagerDuty.IntegrationKey, err = stringOrLoadFromSecretsmanager(
+				cfg.PagerDuty.IntegrationKey, envPagerDutyIntegrationKey)
+			if err != nil {
+				return err
 			}
 
 			{ // parse the list of ignored rules
@@ -171,4 +182,14 @@ func CommandLambda(cfg *config.Config) *cli.Command {
 			return nil
 		},
 	}
+}
+
+// stringOrLoadFromSecretsmanager either returns s as-is, or looks up
+// the Secrets Manager secret by ARN and looks up the key in object
+func stringOrLoadFromSecretsmanager(s, key string) (string, error) {
+	if !strings.HasPrefix(s, "arn:aws:secretsmanager:") {
+		return s, nil
+	}
+
+	return secret.AWSValue(s, key)
 }

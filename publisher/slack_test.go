@@ -29,6 +29,7 @@ var (
 		Labels: map[string]string{
 			"alertname": "TestAlert",
 			"instance":  "Grafana",
+			"severity":  "critical",
 		},
 	}
 
@@ -47,11 +48,12 @@ var (
 	}
 )
 
-func setupSlackPublisher(t *testing.T, ctrl *gomock.Controller) (
-	Publisher, *mock_db.MockDB, *mock_publisher.MockSlackApi,
+func setupSlackPublisher(t *testing.T) (
+	Publisher, *mock_db.MockDB, *mock_publisher.Mock_slackApi,
 ) {
+	ctrl := gomock.NewController(t)
 	db := mock_db.NewMockDB(ctrl)
-	slackApi := mock_publisher.NewMockSlackApi(ctrl)
+	slackApi := mock_publisher.NewMock_slackApi(ctrl)
 
 	slack, err := NewSlackChannel(&config.Slack{
 		Token: "testToken",
@@ -70,8 +72,7 @@ func setupSlackPublisher(t *testing.T, ctrl *gomock.Controller) (
 }
 
 func TestSlackOpeningAlert(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	p, db, slack := setupSlackPublisher(t, ctrl)
+	p, db, slack := setupSlackPublisher(t)
 	ctx := context.Background()
 	alert := alertFiring
 
@@ -81,15 +82,15 @@ func TestSlackOpeningAlert(t *testing.T) {
 	}()
 
 	db.EXPECT().
-		Get(ctx, "testSource/testChannelName/"+alert.MessageFingerprint()).
+		Get(ctx, "testSource/testChannelName/"+alert.MessageDedupKey()).
 		Return("", nil)
 
 	db.EXPECT().
-		Lock(ctx, "testSource/testChannelName/"+alert.MessageFingerprint(), timeoutLock).
+		Lock(ctx, "testSource/testChannelName/"+alert.MessageDedupKey(), timeoutLock).
 		Return(true, nil)
 
 	db.EXPECT().
-		Get(ctx, "testSource/testChannelName/"+alert.ThreadFingerprint()).
+		Get(ctx, "testSource/testChannelName/"+alert.IncidentDedupKey()).
 		Return("", nil) // no thread exists
 
 	slack.EXPECT().
@@ -101,10 +102,10 @@ func TestSlackOpeningAlert(t *testing.T) {
 		})
 
 	db.EXPECT().
-		Set(ctx, "testSource/testChannelName/"+alert.MessageFingerprint(), timeoutThreadExpiry, "testMessageTS")
+		Set(ctx, "testSource/testChannelName/"+alert.MessageDedupKey(), timeoutThreadExpiry, "testMessageTS")
 
 	db.EXPECT().
-		Set(ctx, "testSource/testChannelName/"+alert.ThreadFingerprint(), timeoutThreadExpiry, "testMessageTS")
+		Set(ctx, "testSource/testChannelName/"+alert.IncidentDedupKey(), timeoutThreadExpiry, "testMessageTS")
 
 	slack.EXPECT().
 		RemoveReaction("white_check_mark", gomock.Any()).
@@ -124,8 +125,7 @@ func TestSlackOpeningAlert(t *testing.T) {
 }
 
 func TestSlackFollowUpAlert(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	p, db, slack := setupSlackPublisher(t, ctrl)
+	p, db, slack := setupSlackPublisher(t)
 	ctx := context.Background()
 	alert := alertFiring
 
@@ -135,15 +135,15 @@ func TestSlackFollowUpAlert(t *testing.T) {
 	}()
 
 	db.EXPECT().
-		Get(ctx, "testSource/testChannelName/"+alert.MessageFingerprint()).
+		Get(ctx, "testSource/testChannelName/"+alert.MessageDedupKey()).
 		Return("", nil)
 
 	db.EXPECT().
-		Lock(ctx, "testSource/testChannelName/"+alert.MessageFingerprint(), timeoutLock).
+		Lock(ctx, "testSource/testChannelName/"+alert.MessageDedupKey(), timeoutLock).
 		Return(true, nil)
 
 	db.EXPECT().
-		Get(ctx, "testSource/testChannelName/"+alert.ThreadFingerprint()).
+		Get(ctx, "testSource/testChannelName/"+alert.IncidentDedupKey()).
 		Return("testThreadTS", nil) // thread exists
 
 	slack.EXPECT().
@@ -155,7 +155,7 @@ func TestSlackFollowUpAlert(t *testing.T) {
 		})
 
 	db.EXPECT().
-		Set(ctx, "testSource/testChannelName/"+alert.MessageFingerprint(), timeoutThreadExpiry, "testMessageTS")
+		Set(ctx, "testSource/testChannelName/"+alert.MessageDedupKey(), timeoutThreadExpiry, "testMessageTS")
 
 	slack.EXPECT().
 		RemoveReaction("white_check_mark", gomock.Any()).
@@ -175,8 +175,7 @@ func TestSlackFollowUpAlert(t *testing.T) {
 }
 
 func TestSlackResolvingAlert(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	p, db, slack := setupSlackPublisher(t, ctrl)
+	p, db, slack := setupSlackPublisher(t)
 	ctx := context.Background()
 	alert := alertResolved
 
@@ -186,15 +185,15 @@ func TestSlackResolvingAlert(t *testing.T) {
 	}()
 
 	db.EXPECT().
-		Get(ctx, "testSource/testChannelName/"+alert.MessageFingerprint()).
+		Get(ctx, "testSource/testChannelName/"+alert.MessageDedupKey()).
 		Return("", nil)
 
 	db.EXPECT().
-		Lock(ctx, "testSource/testChannelName/"+alert.MessageFingerprint(), timeoutLock).
+		Lock(ctx, "testSource/testChannelName/"+alert.MessageDedupKey(), timeoutLock).
 		Return(true, nil)
 
 	db.EXPECT().
-		Get(ctx, "testSource/testChannelName/"+alert.ThreadFingerprint()).
+		Get(ctx, "testSource/testChannelName/"+alert.IncidentDedupKey()).
 		Return("testThreadTS", nil) // thread exists
 
 	slack.EXPECT().
@@ -206,7 +205,7 @@ func TestSlackResolvingAlert(t *testing.T) {
 		})
 
 	db.EXPECT().
-		Set(ctx, "testSource/testChannelName/"+alert.MessageFingerprint(), timeoutThreadExpiry, "testMessageTS")
+		Set(ctx, "testSource/testChannelName/"+alert.MessageDedupKey(), timeoutThreadExpiry, "testMessageTS")
 
 	slack.EXPECT().
 		RemoveReaction("rotating_light", gomock.Any()).
@@ -226,8 +225,7 @@ func TestSlackResolvingAlert(t *testing.T) {
 }
 
 func TestSlackDuplicateAlert(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	p, db, _ := setupSlackPublisher(t, ctrl)
+	p, db, _ := setupSlackPublisher(t)
 	ctx := context.Background()
 	alert := alertFiring
 
@@ -237,7 +235,7 @@ func TestSlackDuplicateAlert(t *testing.T) {
 	}()
 
 	db.EXPECT().
-		Get(ctx, "testSource/testChannelName/"+alert.MessageFingerprint()).
+		Get(ctx, "testSource/testChannelName/"+alert.MessageDedupKey()).
 		Return("testMessageTX", nil) // duplicate alert
 
 }

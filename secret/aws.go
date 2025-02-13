@@ -22,6 +22,7 @@ var (
 	ErrSecretEmpty             = errors.New("no secret or secret is empty")
 	ErrSecretFailedToUnmarshal = errors.New("failed to unmarshal the secret")
 	ErrSecretInvalidArn        = errors.New("secret's ARN seems to be corrupt")
+	ErrSecretMissingKey        = errors.New("secret misses key")
 )
 
 func AWS(arn string) (
@@ -69,4 +70,18 @@ func AWS(arn string) (
 	}
 
 	return secrets, nil
+}
+
+// AWSValue returns the value from secret by the key
+func AWSValue(arn, key string) (string, error) {
+	s, err := AWS(arn)
+	if err != nil {
+		return "", err
+	}
+
+	v, ok := s[key]
+	if !ok {
+		return "", fmt.Errorf("%w: %s, '%s'", ErrSecretMissingKey, arn, key)
+	}
+	return v, nil
 }

@@ -4,6 +4,8 @@ type Config struct {
 	DynamoDB  *DynamoDB  `yaml:"dynamo_db"`
 	Log       *Log       `yaml:"log"`
 	Processor *Processor `yaml:"processor"`
+
+	PagerDuty *PagerDuty `yaml:"pagerduty"`
 	Slack     *Slack     `yaml:"slack"`
 }
 
@@ -13,8 +15,7 @@ func New() *Config {
 		Log:       &Log{},
 		Processor: &Processor{},
 
-		Slack: &Slack{
-			Channel: &SlackChannel{},
-		},
+		PagerDuty: &PagerDuty{},
+		Slack:     &Slack{Channel: &SlackChannel{}},
 	}
 }
