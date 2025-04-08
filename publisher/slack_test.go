@@ -58,8 +58,7 @@ func setupSlackPublisher(t *testing.T) (
 	slack, err := NewSlackChannel(&config.Slack{
 		Token: "testToken",
 		Channel: &config.SlackChannel{
-			ID:   "testChannelID",
-			Name: "testChannelName",
+			ID: "testChannelID",
 		},
 	}, db)
 	assert.NoError(t, err, "unexpected error while creating slack publisher")
@@ -82,30 +81,30 @@ func TestSlackOpeningAlert(t *testing.T) {
 	}()
 
 	db.EXPECT().
-		Get(ctx, "testSource/testChannelName/"+alert.MessageDedupKey()).
+		Get(ctx, "testSource/testChannelID/"+alert.MessageDedupKey()).
 		Return("", nil)
 
 	db.EXPECT().
-		Lock(ctx, "testSource/testChannelName/"+alert.MessageDedupKey(), timeoutLock).
+		Lock(ctx, "testSource/testChannelID/"+alert.MessageDedupKey(), timeoutLock).
 		Return(true, nil)
 
 	db.EXPECT().
-		Get(ctx, "testSource/testChannelName/"+alert.IncidentDedupKey()).
+		Get(ctx, "testSource/testChannelID/"+alert.IncidentDedupKey()).
 		Return("", nil) // no thread exists
 
 	slack.EXPECT().
-		PostMessage("testChannelName", gomock.Any()).
+		PostMessage("testChannelID", gomock.Any()).
 		DoAndReturn(func(channelID string, options ...slack_api.MsgOption) (string, string, error) {
-			assert.Equal(t, "testChannelName", channelID)
+			assert.Equal(t, "testChannelID", channelID)
 			assert.Equal(t, 1, len(options))
 			return "", "testMessageTS", nil
 		})
 
 	db.EXPECT().
-		Set(ctx, "testSource/testChannelName/"+alert.MessageDedupKey(), timeoutThreadExpiry, "testMessageTS")
+		Set(ctx, "testSource/testChannelID/"+alert.MessageDedupKey(), timeoutThreadExpiry, "testMessageTS")
 
 	db.EXPECT().
-		Set(ctx, "testSource/testChannelName/"+alert.IncidentDedupKey(), timeoutThreadExpiry, "testMessageTS")
+		Set(ctx, "testSource/testChannelID/"+alert.IncidentDedupKey(), timeoutThreadExpiry, "testMessageTS")
 
 	slack.EXPECT().
 		RemoveReaction("white_check_mark", gomock.Any()).
@@ -135,27 +134,27 @@ func TestSlackFollowUpAlert(t *testing.T) {
 	}()
 
 	db.EXPECT().
-		Get(ctx, "testSource/testChannelName/"+alert.MessageDedupKey()).
+		Get(ctx, "testSource/testChannelID/"+alert.MessageDedupKey()).
 		Return("", nil)
 
 	db.EXPECT().
-		Lock(ctx, "testSource/testChannelName/"+alert.MessageDedupKey(), timeoutLock).
+		Lock(ctx, "testSource/testChannelID/"+alert.MessageDedupKey(), timeoutLock).
 		Return(true, nil)
 
 	db.EXPECT().
-		Get(ctx, "testSource/testChannelName/"+alert.IncidentDedupKey()).
+		Get(ctx, "testSource/testChannelID/"+alert.IncidentDedupKey()).
 		Return("testThreadTS", nil) // thread exists
 
 	slack.EXPECT().
-		PostMessage("testChannelName", gomock.Any()).
+		PostMessage("testChannelID", gomock.Any()).
 		DoAndReturn(func(channelID string, options ...slack_api.MsgOption) (string, string, error) {
-			assert.Equal(t, "testChannelName", channelID)
+			assert.Equal(t, "testChannelID", channelID)
 			assert.Equal(t, 2, len(options))
 			return "", "testMessageTS", nil
 		})
 
 	db.EXPECT().
-		Set(ctx, "testSource/testChannelName/"+alert.MessageDedupKey(), timeoutThreadExpiry, "testMessageTS")
+		Set(ctx, "testSource/testChannelID/"+alert.MessageDedupKey(), timeoutThreadExpiry, "testMessageTS")
 
 	slack.EXPECT().
 		RemoveReaction("white_check_mark", gomock.Any()).
@@ -185,27 +184,27 @@ func TestSlackResolvingAlert(t *testing.T) {
 	}()
 
 	db.EXPECT().
-		Get(ctx, "testSource/testChannelName/"+alert.MessageDedupKey()).
+		Get(ctx, "testSource/testChannelID/"+alert.MessageDedupKey()).
 		Return("", nil)
 
 	db.EXPECT().
-		Lock(ctx, "testSource/testChannelName/"+alert.MessageDedupKey(), timeoutLock).
+		Lock(ctx, "testSource/testChannelID/"+alert.MessageDedupKey(), timeoutLock).
 		Return(true, nil)
 
 	db.EXPECT().
-		Get(ctx, "testSource/testChannelName/"+alert.IncidentDedupKey()).
+		Get(ctx, "testSource/testChannelID/"+alert.IncidentDedupKey()).
 		Return("testThreadTS", nil) // thread exists
 
 	slack.EXPECT().
-		PostMessage("testChannelName", gomock.Any()).
+		PostMessage("testChannelID", gomock.Any()).
 		DoAndReturn(func(channelID string, options ...slack_api.MsgOption) (string, string, error) {
-			assert.Equal(t, "testChannelName", channelID)
+			assert.Equal(t, "testChannelID", channelID)
 			assert.Equal(t, 2, len(options))
 			return "", "testMessageTS", nil
 		})
 
 	db.EXPECT().
-		Set(ctx, "testSource/testChannelName/"+alert.MessageDedupKey(), timeoutThreadExpiry, "testMessageTS")
+		Set(ctx, "testSource/testChannelID/"+alert.MessageDedupKey(), timeoutThreadExpiry, "testMessageTS")
 
 	slack.EXPECT().
 		RemoveReaction("rotating_light", gomock.Any()).
@@ -235,7 +234,7 @@ func TestSlackDuplicateAlert(t *testing.T) {
 	}()
 
 	db.EXPECT().
-		Get(ctx, "testSource/testChannelName/"+alert.MessageDedupKey()).
+		Get(ctx, "testSource/testChannelID/"+alert.MessageDedupKey()).
 		Return("testMessageTX", nil) // duplicate alert
 
 }

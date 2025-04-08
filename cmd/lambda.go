@@ -22,9 +22,8 @@ const (
 )
 
 var (
-	errProcessorInvalidLabelMatch    = errors.New("invalid label match (must be 'label=value')")
-	errSlackChannelIDNotConfigured   = errors.New("slack channel ID must be configured")
-	errSlackChannelNameNotConfigured = errors.New("slack channel name must be configured")
+	errProcessorInvalidLabelMatch  = errors.New("invalid label match (must be 'label=value')")
+	errSlackChannelIDNotConfigured = errors.New("slack channel ID must be configured")
 )
 
 func CommandLambda(cfg *config.Config) *cli.Command {
@@ -76,14 +75,6 @@ func CommandLambda(cfg *config.Config) *cli.Command {
 	flagsSlack := []cli.Flag{
 		&cli.StringFlag{
 			Category:    categorySlack,
-			Destination: &cfg.Slack.Channel.Name,
-			EnvVars:     []string{envPrefix + envPrefixSlack + "CHANNEL_NAME"},
-			Name:        cliPrefixSlack + "channel-name",
-			Usage:       "slack channel `name` to publish alerts to",
-		},
-
-		&cli.StringFlag{
-			Category:    categorySlack,
 			Destination: &cfg.Slack.Channel.ID,
 			EnvVars:     []string{envPrefix + envPrefixSlack + "CHANNEL_ID"},
 			Name:        cliPrefixSlack + "channel-id",
@@ -127,9 +118,6 @@ func CommandLambda(cfg *config.Config) *cli.Command {
 			if cfg.Slack.Token != "" {
 				if cfg.Slack.Channel.ID == "" {
 					return errSlackChannelIDNotConfigured
-				}
-				if cfg.Slack.Channel.Name == "" {
-					return errSlackChannelNameNotConfigured
 				}
 
 				cfg.Slack.Token, err = stringOrLoadFromSecretsmanager(cfg.Slack.Token, envSlackToken)

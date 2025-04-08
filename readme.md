@@ -9,7 +9,6 @@ amp-alerts-sink lambda \
   --processor-ignore-rules DatasourceError \
   --processor-match-labels foo=bar \
   --publisher-slack-channel-id XXXXXXXXXXX \
-  --publisher-slack-channel-name alerts \
   --publisher-slack-token arn:aws:secretsmanager:rrr:aaa:secret:sss
 ```
 
