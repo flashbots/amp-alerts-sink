@@ -39,7 +39,7 @@ func New(cfg *config.Config) (*Processor, error) {
 	if cfg.Slack.Enabled() {
 		slack, err := publisher.NewSlackChannel(
 			cfg.Slack,
-			db.WithNamespace("slack-"+cfg.Slack.Channel.Name),
+			db.WithNamespace("slack-"+cfg.Slack.Channel.ID),
 		)
 		if err != nil {
 			return nil, err

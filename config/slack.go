@@ -7,5 +7,5 @@ type Slack struct {
 
 func (s *Slack) Enabled() bool {
 	return s.Token != "" &&
-		s.Channel != nil && s.Channel.ID != "" && s.Channel.Name != ""
+		s.Channel != nil && s.Channel.ID != ""
 }

@@ -21,8 +21,7 @@ import (
 )
 
 type slackChannel struct {
-	channelID   string
-	channelName string
+	channelID string
 
 	cli slackApi
 	db  db.DB
@@ -40,8 +39,7 @@ var (
 
 func NewSlackChannel(cfg *config.Slack, db db.DB) (Publisher, error) {
 	return &slackChannel{
-		channelName: cfg.Channel.Name,
-		channelID:   cfg.Channel.ID,
+		channelID: cfg.Channel.ID,
 
 		cli: slack.New(cfg.Token),
 		db:  db,
@@ -55,8 +53,8 @@ func (s *slackChannel) Publish(
 ) (err error) {
 	l := logutils.LoggerFromContext(ctx)
 
-	dbKeyThreadTS := source + "/" + s.channelName + "/" + alert.IncidentDedupKey()
-	dbKeyMessageTS := source + "/" + s.channelName + "/" + alert.MessageDedupKey()
+	dbKeyThreadTS := source + "/" + s.channelID + "/" + alert.IncidentDedupKey()
+	dbKeyMessageTS := source + "/" + s.channelID + "/" + alert.MessageDedupKey()
 
 	var messageTS, threadTS string
 
@@ -207,11 +205,11 @@ func (s *slackChannel) publishMessage(
 		)
 	}
 
-	_, messageTS, err := s.cli.PostMessage(s.channelName, opts...)
+	_, messageTS, err := s.cli.PostMessage(s.channelID, opts...)
 	if err != nil {
 		l.Error("Error publishing message to slack",
 			zap.Error(err),
-			zap.String("slack_channel", s.channelName),
+			zap.String("slack_channel_id", s.channelID),
 			zap.String("slack_message_ts", messageTS),
 			zap.String("slack_thread_ts", threadTS),
 		)
@@ -259,7 +257,7 @@ func (s *slackChannel) updateReaction(
 	}(); err != nil {
 		l.Error("Error adding reaction to slack",
 			zap.Error(err),
-			zap.String("slack_channel", s.channelName),
+			zap.String("slack_channel_id", s.channelID),
 			zap.String("slack_reaction", ra),
 			zap.String("slack_thread_ts", threadTS),
 		)
@@ -284,7 +282,7 @@ func (s *slackChannel) updateReaction(
 	}(); err != nil {
 		l.Error("Error removing reaction from slack",
 			zap.Error(err),
-			zap.String("slack_channel", s.channelName),
+			zap.String("slack_channel_id", s.channelID),
 			zap.String("slack_reaction", rr),
 			zap.String("slack_thread_ts", threadTS),
 		)
