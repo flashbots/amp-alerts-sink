@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 	"time"
 
 	"github.com/flashbots/amp-alerts-sink/config"
@@ -97,16 +98,35 @@ func (p pagerDuty) Publish(
 		summary += fmt.Sprint(": ", alert.Annotations["summary"])
 	}
 
+	var links []any
+	addLink := func(href, text string) {
+		if href == "" {
+			return
+		}
+		links = append(links, map[string]string{"href": href, "text": text})
+	}
+	addLink(alert.Annotations["runbook_url"], "📕 Runbook")
+	addLink(alert.GeneratorURL, "📈 Expr")
+	addLink(alert.SilenceURL, "🔕 Silence")
+
+	severity := alert.Labels["severity"]
+	if !slices.Contains([]string{"critical", "warning", "error", "info"}, severity) {
+		// Default severity to critical, if it's not one of the PD valid values.
+		// On invalid severity, PagerDuty will not create an incident.
+		severity = "critical"
+	}
+
 	event := &pagerduty.V2Event{
 		RoutingKey: p.integrationKey,
 		Action:     action,
 		DedupKey:   alert.IncidentDedupKey(),
-		ClientURL:  alert.Annotations["generatorURL"],
+		Links:      links,
+		ClientURL:  alert.GeneratorURL,
 		Payload: &pagerduty.V2Payload{
 			Source:    source,
 			Timestamp: alert.StartsAt,
 			Summary:   summary,
-			Severity:  alert.Labels["severity"],
+			Severity:  severity,
 			Class:     alert.Labels["alertname"],
 		},
 	}

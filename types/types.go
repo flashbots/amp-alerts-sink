@@ -7,11 +7,27 @@ import (
 	"slices"
 )
 
+type AlertmanagerMessage struct {
+	Status            string              `json:"status"`
+	Alerts            []AlertmanagerAlert `json:"alerts"`
+	CommonLabels      map[string]string   `json:"commonLabels"`
+	CommonAnnotations map[string]string   `json:"commonAnnotations"`
+}
+
 type AlertmanagerAlert struct {
-	Annotations map[string]string `json:"annotations"`
+	Status   string `json:"status"`
+	StartsAt string `json:"startsAt"`
+
+	GeneratorURL string `json:"generatorURL"`
+
+	// SilenceURL is a field included by default in Grafana Alertmanager alerts.
+	// However, it can be included in any Alertmanager notification template,
+	// and will get added to rendered alerts from amp-alerts-sink.
+	// Ignored if unset.
+	SilenceURL string `json:"silenceURL"`
+
 	Labels      map[string]string `json:"labels"`
-	StartsAt    string            `json:"startsAt"`
-	Status      string            `json:"status"`
+	Annotations map[string]string `json:"annotations"`
 }
 
 // IncidentDedupKey computes the hash of alert's labels only.
