@@ -43,10 +43,7 @@ func (p pagerDuty) Publish(
 
 	defer func() {
 		if err != nil {
-			l.Error("Failed to publish alert to pagerduty",
-				zap.Error(err),
-				zap.Any("alert", alert),
-			)
+			l.Error("Failed to publish alert to pagerduty", zap.Error(err))
 
 			// If we fail to publish the alert, we should publish another alert
 			// to notify that something is wrong.
@@ -88,26 +85,49 @@ func (p pagerDuty) Publish(
 		}
 	}()
 
-	action := "trigger"
+	event := &pagerduty.V2Event{
+		RoutingKey: p.integrationKey,
+		DedupKey:   alert.IncidentDedupKey(),
+		Payload: &pagerduty.V2Payload{
+			Timestamp: alert.StartsAt,
+			Class:     alert.Labels["alertname"],
+		},
+	}
+
+	event.Action = "trigger"
 	if alert.Status == "resolved" {
-		action = "resolve"
+		event.Action = "resolve"
 	}
 
-	summary := alert.Labels["alertname"]
-	if alert.Annotations["summary"] != "" {
-		summary += fmt.Sprint(": ", alert.Annotations["summary"])
-	}
-
-	var links []any
 	addLink := func(href, text string) {
 		if href == "" {
 			return
 		}
-		links = append(links, map[string]string{"href": href, "text": text})
+		event.Links = append(event.Links, map[string]string{"href": href, "text": text})
 	}
 	addLink(alert.Annotations["runbook_url"], "📕 Runbook")
 	addLink(alert.GeneratorURL, "📈 Expr")
 	addLink(alert.SilenceURL, "🔕 Silence")
+
+	// Use SNS topic ARN, unless the "source" label is set
+	event.Client = source
+	if src := alert.Labels["source"]; src != "" {
+		event.Client = src
+	}
+	event.ClientURL = alert.GeneratorURL
+
+	event.Payload.Summary = alert.Labels["alertname"]
+	if summary := alert.Annotations["summary"]; summary != "" {
+		event.Payload.Summary += ": " + summary
+	}
+
+	// "instance" is always set by scraper, but "instance_name" is optional
+	// Source in payload should be "unique location of the affected system"
+	// as per PagerDuty docs
+	event.Payload.Source = alert.Labels["instance"]
+	if src := alert.Labels["instance_name"]; src != "" {
+		event.Payload.Source = src
+	}
 
 	severity := alert.Labels["severity"]
 	if !slices.Contains([]string{"critical", "warning", "error", "info"}, severity) {
@@ -115,30 +135,16 @@ func (p pagerDuty) Publish(
 		// On invalid severity, PagerDuty will not create an incident.
 		severity = "critical"
 	}
-
-	event := &pagerduty.V2Event{
-		RoutingKey: p.integrationKey,
-		Action:     action,
-		DedupKey:   alert.IncidentDedupKey(),
-		Links:      links,
-		ClientURL:  alert.GeneratorURL,
-		Payload: &pagerduty.V2Payload{
-			Source:    source,
-			Timestamp: alert.StartsAt,
-			Summary:   summary,
-			Severity:  severity,
-			Class:     alert.Labels["alertname"],
-		},
-	}
+	event.Payload.Severity = severity
 
 	details := maps.Clone(alert.Labels)
 	delete(details, "severity")
 	delete(details, "alertname")
 	maps.Copy(details, alert.Annotations)
 	delete(details, "summary")
-	delete(details, "generatorURL")
 	event.Payload.Details = details
 
+	l.Info("Publishing alert to pagerduty", zap.Any("alert", alert))
 	resp, err := p.client.ManageEventWithContext(ctx, event)
 	if err != nil {
 		return err
@@ -146,8 +152,6 @@ func (p pagerDuty) Publish(
 	if len(resp.Errors) > 0 {
 		return fmt.Errorf("pagerduty: %v", resp.Errors)
 	}
-	l.Info("Published alert to pagerduty",
-		zap.Any("alert", alert),
-	)
+	l.Info("Successfully published to pagerduty")
 	return nil
 }
