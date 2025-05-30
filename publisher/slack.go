@@ -174,6 +174,21 @@ func (s *slackChannel) newMessage(
 		msg.Text += fmt.Sprintf("Kubernetes namespace: `%s`\n", namespace)
 	}
 
+	var links []string
+	addLink := func(href, text string) {
+		if href == "" {
+			return
+		}
+		links = append(links, fmt.Sprintf("<%s|%s>", href, text))
+	}
+	addLink(alert.Annotations["runbook_url"], "📕 Runbook")
+	addLink(alert.GeneratorURL, "📈 Expr")
+	addLink(alert.SilenceURL, "🔕 Silence")
+
+	if len(links) > 0 {
+		msg.Text += fmt.Sprintf("\n%s\n", strings.Join(links, " | "))
+	}
+
 	return msg
 }
 
