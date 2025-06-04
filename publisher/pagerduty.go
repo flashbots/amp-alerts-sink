@@ -6,7 +6,9 @@ package publisher
 import (
 	"context"
 	"fmt"
+	"io"
 	"maps"
+	"net/http"
 	"slices"
 	"time"
 
@@ -19,9 +21,11 @@ import (
 )
 
 func NewPagerDuty(cfg *config.PagerDuty) Publisher {
+	c := pagerduty.NewClient("auth-token-unused")
+	c.SetDebugFlag(pagerduty.DebugCaptureLastResponse)
 	return pagerDuty{
 		integrationKey: cfg.IntegrationKey,
-		client:         pagerduty.NewClient("auth-token-unused"),
+		client:         c,
 	}
 }
 
@@ -32,6 +36,7 @@ type pagerDuty struct {
 
 type pagerDutyClient interface {
 	ManageEventWithContext(context.Context, *pagerduty.V2Event) (*pagerduty.V2EventResponse, error)
+	LastAPIResponse() (*http.Response, bool)
 }
 
 func (p pagerDuty) Publish(
@@ -44,6 +49,18 @@ func (p pagerDuty) Publish(
 	defer func() {
 		if err != nil {
 			l.Error("Failed to publish alert to pagerduty", zap.Error(err))
+
+			errResp, ok := p.client.LastAPIResponse()
+			if ok && errResp != nil {
+				// ignore the errors, we don't care
+				body, _ := io.ReadAll(errResp.Body)
+
+				l.Error("PagerDuty API response",
+					zap.String("status", errResp.Status),
+					zap.String("headers", fmt.Sprintf("%+v", errResp.Header)),
+					zap.String("body", string(body)),
+				)
+			}
 
 			// If we fail to publish the alert, we should publish another alert
 			// to notify that something is wrong.

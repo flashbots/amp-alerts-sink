@@ -11,6 +11,7 @@ package mock_publisher
 
 import (
 	context "context"
+	http "net/http"
 	reflect "reflect"
 
 	pagerduty "github.com/PagerDuty/go-pagerduty"
@@ -39,6 +40,21 @@ func NewMock_pagerDutyClient(ctrl *gomock.Controller) *Mock_pagerDutyClient {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *Mock_pagerDutyClient) EXPECT() *Mock_pagerDutyClientMockRecorder {
 	return m.recorder
+}
+
+// LastAPIResponse mocks base method.
+func (m *Mock_pagerDutyClient) LastAPIResponse() (*http.Response, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LastAPIResponse")
+	ret0, _ := ret[0].(*http.Response)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// LastAPIResponse indicates an expected call of LastAPIResponse.
+func (mr *Mock_pagerDutyClientMockRecorder) LastAPIResponse() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LastAPIResponse", reflect.TypeOf((*Mock_pagerDutyClient)(nil).LastAPIResponse))
 }
 
 // ManageEventWithContext mocks base method.
