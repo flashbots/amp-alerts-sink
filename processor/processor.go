@@ -134,8 +134,5 @@ func (p *Processor) processMessage(
 			}
 		}
 	}
-	if len(errs) != 0 {
-		return errors.Join(errs...)
-	}
-	return nil
+	return errors.Join(errs...)
 }
