@@ -49,7 +49,7 @@ func (p *Processor) ProcessSnsEvent(ctx context.Context, event events.SNSEvent) 
 				},
 			}},
 		}
-		if err := p.processMessage(ctx, "amp-alets-sink", alert); err != nil {
+		if err := p.processMessage(ctx, "amp-alerts-sink", alert); err != nil {
 			l.Error("Failed to send parse error alert", zap.Error(err))
 		}
 	}
