@@ -52,14 +52,18 @@ func (p pagerDuty) Publish(
 
 			errResp, ok := p.client.LastAPIResponse()
 			if ok && errResp != nil {
-				// ignore the errors, we don't care
-				body, _ := io.ReadAll(errResp.Body)
+				body, err := io.ReadAll(errResp.Body)
 
-				l.Error("PagerDuty API response",
+				logFields := []zap.Field{
 					zap.String("status", errResp.Status),
 					zap.String("headers", fmt.Sprintf("%+v", errResp.Header)),
 					zap.String("body", string(body)),
-				)
+				}
+				if err != nil {
+					logFields = append(logFields, zap.Error(err))
+				}
+
+				l.Error("PagerDuty API response", logFields...)
 			}
 
 			// If we fail to publish the alert, we should publish another alert
@@ -138,15 +142,19 @@ func (p pagerDuty) Publish(
 		event.Payload.Summary += ": " + summary
 	}
 
-	// "instance" is set by scraper, but "instance_name" is more readable
 	// Source in payload should be "unique location of the affected system"
 	// as per PagerDuty docs
-	event.Payload.Source = alert.Labels["instance"]
-	if src := alert.Labels["instance_name"]; src != "" {
-		event.Payload.Source = src
-	}
-	if event.Payload.Source == "" {
-		// If no source is set, set dummy value.
+	id := alert.Labels["instance"]
+	name := alert.Labels["instance_name"]
+	switch {
+	case id != "" && name != "":
+		event.Payload.Source = fmt.Sprintf("%s (%s)", name, id)
+	case id != "":
+		event.Payload.Source = id
+	case name != "":
+		event.Payload.Source = name
+	default:
+		// If no instance is set, set dummy value.
 		// This field is required by PagerDuty API.
 		event.Payload.Source = "unknown"
 	}
