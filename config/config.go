@@ -7,6 +7,7 @@ type Config struct {
 
 	PagerDuty *PagerDuty `yaml:"pagerduty"`
 	Slack     *Slack     `yaml:"slack"`
+	Webhook   *Webhook   `yaml:"webhook"`
 }
 
 func New() *Config {
@@ -17,5 +18,6 @@ func New() *Config {
 
 		PagerDuty: &PagerDuty{},
 		Slack:     &Slack{Channel: &SlackChannel{}},
+		Webhook:   &Webhook{},
 	}
 }
