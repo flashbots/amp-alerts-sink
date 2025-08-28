@@ -19,6 +19,7 @@ const (
 	categoryProcessor = "PROCESSOR:"
 	categorySlack     = "PUBLISHER SLACK:"
 	categoryPagerDuty = "PUBLISHER PAGERDUTY:"
+	categoryWebhook   = "PUBLISHER WEBHOOK:"
 )
 
 var (
@@ -31,14 +32,17 @@ func CommandLambda(cfg *config.Config) *cli.Command {
 	envPrefixProcessor := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(categoryProcessor, " ", "_"), ":", "")) + "_"
 	envPrefixSlack := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(categorySlack, " ", "_"), ":", "")) + "_"
 	envPrefixPagerDuty := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(categoryPagerDuty, " ", "_"), ":", "")) + "_"
+	envPrefixWebhook := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(categoryWebhook, " ", "_"), ":", "")) + "_"
 
 	cliPrefixDynamoDB := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(categoryDynamoDB, " ", "-"), ":", "")) + "-"
 	cliPrefixProcessor := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(categoryProcessor, " ", "-"), ":", "")) + "-"
 	cliPrefixSlack := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(categorySlack, " ", "-"), ":", "")) + "-"
 	cliPrefixPagerDuty := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(categoryPagerDuty, " ", "-"), ":", "")) + "-"
+	cliPrefixWebhook := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(categoryWebhook, " ", "-"), ":", "")) + "-"
 
 	envSlackToken := envPrefix + envPrefixSlack + "TOKEN"
 	envPagerDutyIntegrationKey := envPrefix + envPrefixPagerDuty + "INTEGRATION_KEY"
+	envWebhookURL := envPrefix + envPrefixWebhook + "URL"
 
 	rawProcessorIgnoreRules := &cli.StringSlice{}
 	rawProcessorMatchLabels := &cli.StringSlice{}
@@ -100,11 +104,40 @@ func CommandLambda(cfg *config.Config) *cli.Command {
 		},
 	}
 
+	flagsWebhook := []cli.Flag{
+		&cli.StringFlag{
+			Category:    categoryWebhook,
+			Destination: &cfg.Webhook.URL,
+			EnvVars:     []string{envWebhookURL},
+			Name:        cliPrefixWebhook + "url",
+			Usage:       "webhook `URL` to send alerts to (either raw URL, or ARN of secret manager)",
+		},
+
+		&cli.StringFlag{
+			Category:    categoryWebhook,
+			Destination: &cfg.Webhook.Method,
+			EnvVars:     []string{envPrefix + envPrefixWebhook + "METHOD"},
+			Name:        cliPrefixWebhook + "method",
+			Usage:       "HTTP `method` to use for webhook requests",
+			Value:       "POST",
+		},
+
+		&cli.BoolFlag{
+			Category:    categoryWebhook,
+			Destination: &cfg.Webhook.SendBody,
+			EnvVars:     []string{envPrefix + envPrefixWebhook + "SEND_BODY"},
+			Name:        cliPrefixWebhook + "send-body",
+			Usage:       "whether to send alert data as JSON body in webhook requests",
+			Value:       true,
+		},
+	}
+
 	flags := slices.Concat(
 		flagsDB,
 		flagsProcessor,
 		flagsSlack,
 		flagsPagerDuty,
+		flagsWebhook,
 	)
 
 	return &cli.Command{
@@ -128,6 +161,12 @@ func CommandLambda(cfg *config.Config) *cli.Command {
 
 			cfg.PagerDuty.IntegrationKey, err = stringOrLoadFromSecretsmanager(
 				cfg.PagerDuty.IntegrationKey, envPagerDutyIntegrationKey)
+			if err != nil {
+				return err
+			}
+
+			cfg.Webhook.URL, err = stringOrLoadFromSecretsmanager(
+				cfg.Webhook.URL, envWebhookURL)
 			if err != nil {
 				return err
 			}

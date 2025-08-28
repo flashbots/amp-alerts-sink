@@ -2,6 +2,8 @@ package processor
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"time"
 
@@ -49,6 +51,15 @@ func New(cfg *config.Config) (*Processor, error) {
 
 	if cfg.PagerDuty.Enabled() {
 		publishers = append(publishers, publisher.NewPagerDuty(cfg.PagerDuty))
+	}
+
+	if cfg.Webhook.Enabled() {
+		urlHash := sha256.Sum256([]byte(cfg.Webhook.URL))
+
+		publishers = append(publishers, publisher.NewWebhook(
+			cfg.Webhook,
+			db.WithNamespace("webhook-"+hex.EncodeToString(urlHash[:])),
+		))
 	}
 
 	if len(publishers) == 0 {
