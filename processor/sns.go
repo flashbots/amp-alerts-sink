@@ -20,9 +20,10 @@ func (p *Processor) ProcessSnsEvent(ctx context.Context, event events.SNSEvent) 
 	errs := []error{}
 	for _, r := range event.Records {
 		m := &types.AlertmanagerMessage{}
-		if err := json.Unmarshal([]byte(r.SNS.Message), m); err != nil {
+		message := strings.ReplaceAll(r.SNS.Message, "\\'", "'")
+		if err := json.Unmarshal([]byte(message), m); err != nil {
 			l.Error("Error un-marshalling message",
-				zap.String("message", strings.Replace(r.SNS.Message, "\n", " ", -1)),
+				zap.String("message", strings.ReplaceAll(message, "\n", " ")),
 				zap.Error(err),
 			)
 			errs = append(errs, err)
