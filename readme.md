@@ -41,3 +41,31 @@ resource "aws_dynamodb_table" "amp_alerts_sink" {
   }
 }
 ```
+
+## Webhook publisher
+
+The webhook publisher sends alerts to an arbitrary HTTP endpoint. It supports deduplication via DynamoDB to prevent duplicate deliveries across concurrent Lambda invocations.
+
+### Configuration
+
+| Flag                            | Env var                                       | Description                                      |
+| ------------------------------- | --------------------------------------------- | ------------------------------------------------ |
+| `--publisher-webhook-url`       | `AMP_ALERTS_SINK_PUBLISHER_WEBHOOK_URL`       | Webhook URL (raw URL or AWS Secrets Manager ARN) |
+| `--publisher-webhook-method`    | `AMP_ALERTS_SINK_PUBLISHER_WEBHOOK_METHOD`    | HTTP method (default: `POST`)                    |
+| `--publisher-webhook-send-body` | `AMP_ALERTS_SINK_PUBLISHER_WEBHOOK_SEND_BODY` | Send alert as JSON body (default: `true`)        |
+
+### Request format
+
+When `send-body` is enabled, the webhook sends a JSON payload compatible with the Alertmanager webhook receiver format (`notify/webhook.Message`):
+
+```json
+{
+  "version": "4",
+  "groupKey": "<dedup key>",
+  "receiver": "<source>",
+  "status": "<status>",
+  "alerts": [{ "...": "..." }]
+}
+```
+
+When `send-body` is disabled, a request with no body is sent to the configured URL (useful for simple trigger-style webhooks).

@@ -7,11 +7,25 @@ import (
 	"slices"
 )
 
+// Same as github.com/prometheus/alertmanager/template.Data
 type AlertmanagerMessage struct {
+	Receiver          string              `json:"receiver"`
 	Status            string              `json:"status"`
 	Alerts            []AlertmanagerAlert `json:"alerts"`
+	GroupLabels       map[string]string   `json:"groupLabels"`
 	CommonLabels      map[string]string   `json:"commonLabels"`
 	CommonAnnotations map[string]string   `json:"commonAnnotations"`
+	ExternalURL       string              `json:"externalURL"`
+}
+
+// Same as github.com/prometheus/alertmanager/notify/webhook.Message
+type AlertmanagerWebhook struct {
+	AlertmanagerMessage
+
+	// Version should be set to "4", at the time of writing.
+	Version         string `json:"version"`
+	GroupKey        string `json:"groupKey"`
+	TruncatedAlerts int    `json:"truncatedAlerts"`
 }
 
 type AlertmanagerAlert struct {

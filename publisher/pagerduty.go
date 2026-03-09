@@ -1,7 +1,6 @@
 package publisher
 
-// TODO: switch to 'go tool' once 1.24 is released
-//go:generate mockgen -package mock_publisher -destination ../mock/publisher/pagerduty.go -source pagerduty.go  -mock_names pagerDutyClient=Mock_pagerDutyClient pagerDutyClient
+//go:generate go tool mockgen -package mock_publisher -destination ../mock/publisher/pagerduty.go -source pagerduty.go  -mock_names pagerDutyClient=Mock_pagerDutyClient pagerDutyClient
 
 import (
 	"context"

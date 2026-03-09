@@ -12,6 +12,7 @@ type Publisher interface {
 }
 
 const (
-	timeoutLock         = time.Second
-	timeoutThreadExpiry = 30 * 24 * time.Hour
+	timeoutLock          = time.Second
+	timeoutThreadExpiry  = 30 * 24 * time.Hour
+	timeoutWebhookExpiry = 30 * 24 * time.Hour
 )
