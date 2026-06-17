@@ -149,14 +149,13 @@ func (ddb *dynamoDb) Get(
 		return "", nil
 	}
 
+	// A lock item (written by Lock) has no "value" attribute, so the lookup
+	// returns a nil *AttributeValue; guard against it before dereferencing.
 	value := output.Item[ddbKeyValue]
-	switch {
-	// TODO: fill-in other case?
-	case value.S != nil:
-		return *value.S, nil
-	default:
+	if value == nil || value.S == nil {
 		return "", nil
 	}
+	return *value.S, nil
 }
 
 func (ddb *dynamoDb) WithNamespace(namespace string) DB {
