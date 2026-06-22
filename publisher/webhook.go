@@ -56,8 +56,8 @@ func (w *webhook) Publish(
 
 	isDup, err := w.checkDupAndLock(ctx, alert)
 	if isDup {
-		// Enter this branch even with non-nil err;
-		// Only for ErrAlreadyLocked, so that lambda execution will be restarted
+		// A non-nil err here is always ErrAlreadyLocked, which the processor
+		// now handles as a harmless duplicate (an HA peer will publish it).
 		l.Info("Duplicate alert detected", zap.Error(err))
 		return err
 	}

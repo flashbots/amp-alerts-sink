@@ -141,6 +141,13 @@ func (p *Processor) processMessage(
 		// publish
 		for _, pub := range p.publishers {
 			if err := pub.Publish(ctx, source, &alert); err != nil {
+				// Losing the dedup lock race just means an HA peer got there
+				// first and is publishing this alert for us. Nothing went
+				// wrong, so skip it quietly instead of failing and alerting.
+				if errors.Is(err, publisher.ErrAlreadyLocked) {
+					l.Debug("Skipped publishing; another instance holds the dedup lock")
+					continue
+				}
 				errs = append(errs, err)
 			}
 		}
