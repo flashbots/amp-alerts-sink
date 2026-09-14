@@ -20,9 +20,17 @@ type stubPublisher struct {
 	calls []types.AlertmanagerAlert
 }
 
-func (s *stubPublisher) Publish(_ context.Context, _ string, alert *types.AlertmanagerAlert) error {
+func (s *stubPublisher) Name() string {
+	return "stub"
+}
+
+func (s *stubPublisher) Publish(
+	_ context.Context, _ string,
+	alert *types.AlertmanagerAlert,
+	_ publisher.Results,
+) (publisher.Metadata, error) {
 	s.calls = append(s.calls, *alert)
-	return s.err
+	return nil, s.err
 }
 
 func newTestProcessor(pub publisher.Publisher) *Processor {

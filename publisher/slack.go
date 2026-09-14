@@ -45,15 +45,22 @@ func NewSlackChannel(cfg *config.Slack, db db.DB) (Publisher, error) {
 	}, nil
 }
 
+func (s *slackChannel) Name() string {
+	return NameSlack
+}
+
 func (s *slackChannel) Publish(
 	ctx context.Context,
 	source string,
 	alert *types.AlertmanagerAlert,
-) (err error) {
+	_ Results,
+) (metadata Metadata, err error) {
 	l := logutils.LoggerFromContext(ctx)
 
 	dbKeyThreadTS := source + "/" + s.channelID + "/" + alert.IncidentDedupKey()
 	dbKeyMessageTS := source + "/" + s.channelID + "/" + alert.MessageDedupKey()
+
+	metadata = Metadata{"channel_id": s.channelID}
 
 	var messageTS, threadTS string
 
@@ -62,8 +69,14 @@ func (s *slackChannel) Publish(
 	message := s.newMessage(alert)
 	defer func() {
 		if !alreadyPublished {
-			_, err2 := s.publishMessage(ctx, message, threadTS)
+			emergencyMessageTS, err2 := s.publishMessage(ctx, message, threadTS)
 			if err2 == nil {
+				if _, exists := metadata["message_ts"]; !exists {
+					metadata["message_ts"] = emergencyMessageTS
+				}
+				if _, exists := metadata["thread_ts"]; !exists && threadTS != "" {
+					metadata["thread_ts"] = threadTS
+				}
 				l.Warn("Emergency-published the alert to slack",
 					zap.Any("alert", alert),
 				)
@@ -75,13 +88,14 @@ func (s *slackChannel) Publish(
 	// fetch timestamps from the db (if present)
 	messageTS, err = s.db.Get(ctx, dbKeyMessageTS)
 	if err != nil {
-		return err
+		return metadata, err
 	}
 
 	// check if this message was already published
 	if len(messageTS) > 0 {
+		metadata["message_ts"] = messageTS
 		alreadyPublished = true
-		return nil
+		return metadata, nil
 	}
 
 	// try to lock the db
@@ -89,24 +103,22 @@ func (s *slackChannel) Publish(
 	if !didLock && err == nil {
 		// another grafana's HA instance is about to publish
 		alreadyPublished = true
-		return ErrAlreadyLocked
+		return metadata, ErrAlreadyLocked
 	}
 
 	// check if this is a follow-up message
 	threadTS, err = s.db.Get(ctx, dbKeyThreadTS)
 	if err != nil {
-		return err
+		return metadata, err
 	}
 
 	// send message to slack
 	messageTS, err = s.publishMessage(ctx, message, threadTS)
 	if err != nil {
-		return err
+		return metadata, err
 	}
+	metadata["message_ts"] = messageTS
 	alreadyPublished = true
-	l.Info("Published alert to slack",
-		zap.Any("alert", alert),
-	)
 
 	// make sure we don't re-publish it from another HA instance
 	_ = s.db.Set(ctx, dbKeyMessageTS, timeoutThreadExpiry, messageTS)
@@ -116,13 +128,19 @@ func (s *slackChannel) Publish(
 		threadTS = messageTS
 		_ = s.db.Set(ctx, dbKeyThreadTS, timeoutThreadExpiry, threadTS)
 	}
+	metadata["thread_ts"] = threadTS
 
 	// update reaction emoji on the thread-starting message
 	if len(threadTS) > 0 {
 		s.updateReaction(ctx, alert, threadTS)
 	}
 
-	return nil
+	l.Info("Published alert to slack",
+		zap.Any("alert", alert),
+		zap.Any("metadata", metadata),
+	)
+
+	return metadata, nil
 }
 
 func (s *slackChannel) newMessage(

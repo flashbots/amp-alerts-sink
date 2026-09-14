@@ -46,11 +46,16 @@ func NewWebhook(cfg *config.Webhook, db db.DB) Publisher {
 	}
 }
 
+func (w *webhook) Name() string {
+	return NameWebhook
+}
+
 func (w *webhook) Publish(
 	ctx context.Context,
 	source string,
 	alert *types.AlertmanagerAlert,
-) error {
+	_ Results,
+) (Metadata, error) {
 	l := logutils.LoggerFromContext(ctx)
 	l.Info("Publishing alert", zap.Any("alert", alert))
 
@@ -59,21 +64,22 @@ func (w *webhook) Publish(
 		// A non-nil err here is always ErrAlreadyLocked, which the processor
 		// now handles as a harmless duplicate (an HA peer will publish it).
 		l.Info("Duplicate alert detected", zap.Error(err))
-		return err
+		return nil, err
 	}
 	// not a duplicate
 	if err != nil {
 		l.Error("Failed to check for duplicate alert, sending webhook", zap.Error(err))
 	}
 
-	err = w.sendWebhook(ctx, source, alert)
+	metadata, err := w.sendWebhook(ctx, source, alert)
 	if err != nil {
 		l.Error("Failed to send alert", zap.Error(err))
 	} else {
 		// sent correctly, prevent other instances from sending
 		_ = w.db.Set(ctx, alert.MessageDedupKey(), timeoutWebhookExpiry, "1")
 	}
-	return err
+
+	return metadata, err
 }
 
 func (w *webhook) checkDupAndLock(ctx context.Context, alert *types.AlertmanagerAlert) (isDup bool, err error) {
@@ -101,7 +107,7 @@ func (w *webhook) sendWebhook(
 	ctx context.Context,
 	source string,
 	alert *types.AlertmanagerAlert,
-) error {
+) (Metadata, error) {
 	l := logutils.LoggerFromContext(ctx)
 
 	var reqBody io.Reader
@@ -111,7 +117,7 @@ func (w *webhook) sendWebhook(
 		buf, err := w.encodeAlert(source, alert)
 		if err != nil {
 			l.Error("Failed to encode alert", zap.Error(err))
-			return err
+			return nil, err
 		}
 		l.Debug("Webhook payload", zap.ByteString("body", buf.Bytes()))
 
@@ -122,7 +128,7 @@ func (w *webhook) sendWebhook(
 	req, err := http.NewRequestWithContext(ctx, w.method, w.url, reqBody)
 	if err != nil {
 		l.Error("Failed to create webhook request", zap.Error(err))
-		return fmt.Errorf("failed to create webhook request: %w", err)
+		return nil, fmt.Errorf("failed to create webhook request: %w", err)
 	}
 
 	if contentType != "" {
@@ -139,7 +145,7 @@ func (w *webhook) sendWebhook(
 	resp, err := w.client.Do(req)
 	if err != nil {
 		l.Error("Webhook request failed", zap.Error(err))
-		return fmt.Errorf("webhook request failed: %w", err)
+		return nil, fmt.Errorf("webhook request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -148,21 +154,31 @@ func (w *webhook) sendWebhook(
 		l.Warn("Failed to read webhook response body", zap.Error(readErr))
 	}
 
+	metadata := Metadata{
+		"status":      resp.Status,
+		"status_code": resp.StatusCode,
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		l.Error("Webhook returned non-200 status",
 			zap.Int("status_code", resp.StatusCode),
 			zap.String("response_body", string(respBody)),
 		)
-		return fmt.Errorf("webhook returned status %d: %s", resp.StatusCode, resp.Status)
+		return metadata, fmt.Errorf("webhook returned status %d: %s", resp.StatusCode, resp.Status)
 	}
 
 	l.Info("Successfully published alert to webhook",
+		zap.Any("alert", alert),
+		zap.Any("metadata", metadata),
 		zap.String("response_body", string(respBody)),
 	)
-	return nil
+	return metadata, nil
 }
 
-func (w *webhook) encodeAlert(source string, alert *types.AlertmanagerAlert) (*bytes.Buffer, error) {
+func (w *webhook) encodeAlert(
+	source string,
+	alert *types.AlertmanagerAlert,
+) (*bytes.Buffer, error) {
 	body := types.AlertmanagerWebhook{
 		Version:  "4",
 		GroupKey: alert.MessageDedupKey(),

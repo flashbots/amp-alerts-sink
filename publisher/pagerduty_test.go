@@ -45,7 +45,7 @@ func TestPagerDutyAlertCreation(t *testing.T) {
 			return &pagerduty.V2EventResponse{}, nil
 		})
 
-	err := p.Publish(ctx, "testSource", alert)
+	_, err := p.Publish(ctx, "testSource", alert, nil)
 	assert.NoError(t, err)
 }
 
@@ -61,12 +61,12 @@ func TestPagerDutyDuplicateAlert(t *testing.T) {
 			return &pagerduty.V2EventResponse{}, nil
 		}).Times(2)
 
-	err := p.Publish(ctx, "testSource", alert)
+	_, err := p.Publish(ctx, "testSource", alert, nil)
 	assert.NoError(t, err)
 
 	// Change the alert annotations, but keep the same dedup key
 	alert.Annotations["foo"] = "bar"
-	err = p.Publish(ctx, "testSource", alert)
+	_, err = p.Publish(ctx, "testSource", alert, nil)
 	assert.NoError(t, err)
 }
 
@@ -101,10 +101,10 @@ func TestPagerDutyDifferentDedupKey(t *testing.T) {
 			return &pagerduty.V2EventResponse{}, nil
 		}).Times(2)
 
-	err := p.Publish(ctx, "testSource", alert1)
+	_, err := p.Publish(ctx, "testSource", alert1, nil)
 	assert.NoError(t, err)
 
-	err = p.Publish(ctx, "testSource", alert2)
+	_, err = p.Publish(ctx, "testSource", alert2, nil)
 	assert.NoError(t, err)
 }
 
@@ -124,7 +124,7 @@ func TestPagerDutyResolveAlert(t *testing.T) {
 		})
 
 	// Fire the alert
-	err := p.Publish(ctx, "testSource", alertFiring)
+	_, err := p.Publish(ctx, "testSource", alertFiring, nil)
 	assert.NoError(t, err)
 
 	// Expect the alert to be resolved
@@ -137,6 +137,6 @@ func TestPagerDutyResolveAlert(t *testing.T) {
 		})
 
 	// Resolve the alert
-	err = p.Publish(ctx, "testSource", alertResolved)
+	_, err = p.Publish(ctx, "testSource", alertResolved, nil)
 	assert.NoError(t, err)
 }

@@ -38,11 +38,16 @@ type pagerDutyClient interface {
 	LastAPIResponse() (*http.Response, bool)
 }
 
+func (p pagerDuty) Name() string {
+	return NamePagerDuty
+}
+
 func (p pagerDuty) Publish(
 	ctx context.Context,
 	source string,
 	alert *types.AlertmanagerAlert,
-) (err error) {
+	_ Results,
+) (metadata Metadata, err error) {
 	l := logutils.LoggerFromContext(ctx)
 
 	defer func() {
@@ -180,11 +185,22 @@ func (p pagerDuty) Publish(
 	)
 	resp, err := p.client.ManageEventWithContext(ctx, event)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	metadata = Metadata{
+		"dedup_key": resp.DedupKey,
+		"message":   resp.Message,
+		"status":    resp.Status,
 	}
 	if len(resp.Errors) > 0 {
-		return fmt.Errorf("pagerduty: %v", resp.Errors)
+		return metadata, fmt.Errorf("pagerduty: %v", resp.Errors)
 	}
-	l.Info("Successfully published to pagerduty")
-	return nil
+
+	l.Info("Successfully published to pagerduty",
+		zap.Any("alert", alert),
+		zap.Any("event", event),
+		zap.Any("metadata", metadata),
+	)
+
+	return metadata, nil
 }
