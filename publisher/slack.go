@@ -26,6 +26,18 @@ type slackChannel struct {
 	db  db.DB
 }
 
+type slackError struct {
+	err error
+}
+
+func (err slackError) Error() string {
+	return err.err.Error()
+}
+
+func (err slackError) IsReportable() bool {
+	return true
+}
+
 type slackApi interface {
 	AddReaction(name string, item slack.ItemRef) error
 	PostMessage(channelID string, options ...slack.MsgOption) (string, string, error)
@@ -54,7 +66,7 @@ func (s *slackChannel) Publish(
 	source string,
 	alert *types.AlertmanagerAlert,
 	_ Results,
-) (metadata Metadata, err error) {
+) (metadata Metadata, publisherErr PublisherError) {
 	l := logutils.LoggerFromContext(ctx)
 
 	dbKeyThreadTS := source + "/" + s.channelID + "/" + alert.IncidentDedupKey()
@@ -81,21 +93,22 @@ func (s *slackChannel) Publish(
 					zap.Any("alert", alert),
 				)
 			}
-			err = errors.Join(err, err2)
+			publisherErr = slackError{err: errors.Join(publisherErr, err2)}
 		}
 	}()
 
 	// fetch timestamps from the db (if present)
+	var err error
 	messageTS, err = s.db.Get(ctx, dbKeyMessageTS)
 	if err != nil {
-		return metadata, err
+		return metadata, slackError{err: err}
 	}
 
 	// check if this message was already published
 	if len(messageTS) > 0 {
 		metadata["message_ts"] = messageTS
 		alreadyPublished = true
-		return metadata, nil
+		return metadata, slackError{err: nil}
 	}
 
 	// try to lock the db
@@ -103,19 +116,19 @@ func (s *slackChannel) Publish(
 	if !didLock && err == nil {
 		// another grafana's HA instance is about to publish
 		alreadyPublished = true
-		return metadata, ErrAlreadyLocked
+		return metadata, slackError{err: ErrAlreadyLocked}
 	}
 
 	// check if this is a follow-up message
 	threadTS, err = s.db.Get(ctx, dbKeyThreadTS)
 	if err != nil {
-		return metadata, err
+		return metadata, slackError{err: err}
 	}
 
 	// send message to slack
 	messageTS, err = s.publishMessage(ctx, message, threadTS)
 	if err != nil {
-		return metadata, err
+		return metadata, slackError{err: err}
 	}
 	metadata["message_ts"] = messageTS
 	alreadyPublished = true

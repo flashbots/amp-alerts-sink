@@ -20,6 +20,18 @@ type metadataStubPublisher struct {
 	calls    *[]string
 }
 
+type metadataStubPublisherError struct {
+	err error
+}
+
+func (err metadataStubPublisherError) Error() string {
+	return err.err.Error()
+}
+
+func (err metadataStubPublisherError) IsReportable() bool {
+	return false
+}
+
 func (p *metadataStubPublisher) Name() string {
 	return p.name
 }
@@ -29,12 +41,12 @@ func (p *metadataStubPublisher) Publish(
 	_ string,
 	_ *types.AlertmanagerAlert,
 	previous publisher.Results,
-) (publisher.Metadata, error) {
+) (publisher.Metadata, publisher.PublisherError) {
 	p.previous = previous
 	if p.calls != nil {
 		*p.calls = append(*p.calls, p.name)
 	}
-	return p.metadata, p.err
+	return p.metadata, metadataStubPublisherError{err: p.err}
 }
 
 func TestProcessorPassesPreviousPublisherResults(t *testing.T) {

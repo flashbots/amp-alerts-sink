@@ -28,6 +28,18 @@ func NewPagerDuty(cfg *config.PagerDuty) Publisher {
 	}
 }
 
+type pagerDutyError struct {
+	err error
+}
+
+func (err pagerDutyError) Error() string {
+	return err.err.Error()
+}
+
+func (err pagerDutyError) IsReportable() bool {
+	return true
+}
+
 type pagerDuty struct {
 	integrationKey string
 	client         pagerDutyClient
@@ -47,12 +59,12 @@ func (p pagerDuty) Publish(
 	source string,
 	alert *types.AlertmanagerAlert,
 	_ Results,
-) (metadata Metadata, err error) {
+) (metadata Metadata, publisherErr PublisherError) {
 	l := logutils.LoggerFromContext(ctx)
 
 	defer func() {
-		if err != nil {
-			l.Error("Failed to publish alert to pagerduty", zap.Error(err))
+		if publisherErr != nil {
+			l.Error("Failed to publish alert to pagerduty", zap.Error(publisherErr))
 
 			errResp, ok := p.client.LastAPIResponse()
 			if ok && errResp != nil {
@@ -74,7 +86,7 @@ func (p pagerDuty) Publish(
 			// to notify that something is wrong.
 			// Not including dedup_key so to spawn a new incident.
 
-			errStr := err.Error()
+			errStr := publisherErr.Error()
 			if len(errStr) > 1024 {
 				errStr = errStr[:1024] // so that we don't accidentally exceed the size limit
 			}
@@ -185,7 +197,7 @@ func (p pagerDuty) Publish(
 	)
 	resp, err := p.client.ManageEventWithContext(ctx, event)
 	if err != nil {
-		return nil, err
+		return nil, pagerDutyError{err: err}
 	}
 	metadata = Metadata{
 		"dedup_key": resp.DedupKey,
@@ -193,7 +205,7 @@ func (p pagerDuty) Publish(
 		"status":    resp.Status,
 	}
 	if len(resp.Errors) > 0 {
-		return metadata, fmt.Errorf("pagerduty: %v", resp.Errors)
+		return metadata, pagerDutyError{err: fmt.Errorf("pagerduty: %v", resp.Errors)}
 	}
 
 	l.Info("Successfully published to pagerduty",

@@ -26,6 +26,18 @@ type webhook struct {
 	db     db.DB
 }
 
+type webhookError struct {
+	err error
+}
+
+func (err webhookError) Error() string {
+	return err.err.Error()
+}
+
+func (err webhookError) IsReportable() bool {
+	return true
+}
+
 type httpClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
@@ -55,7 +67,7 @@ func (w *webhook) Publish(
 	source string,
 	alert *types.AlertmanagerAlert,
 	_ Results,
-) (Metadata, error) {
+) (Metadata, PublisherError) {
 	l := logutils.LoggerFromContext(ctx)
 	l.Info("Publishing alert", zap.Any("alert", alert))
 
@@ -64,7 +76,7 @@ func (w *webhook) Publish(
 		// A non-nil err here is always ErrAlreadyLocked, which the processor
 		// now handles as a harmless duplicate (an HA peer will publish it).
 		l.Info("Duplicate alert detected", zap.Error(err))
-		return nil, err
+		return nil, webhookError{err: err}
 	}
 	// not a duplicate
 	if err != nil {
@@ -79,13 +91,13 @@ func (w *webhook) Publish(
 		_ = w.db.Set(ctx, alert.MessageDedupKey(), timeoutWebhookExpiry, "1")
 	}
 
-	return metadata, err
+	return metadata, webhookError{err: err}
 }
 
 func (w *webhook) checkDupAndLock(ctx context.Context, alert *types.AlertmanagerAlert) (isDup bool, err error) {
 	v, err := w.db.Get(ctx, alert.MessageDedupKey())
 	if err != nil {
-		return false, fmt.Errorf("failed to check for duplicate alert: %w", err)
+		return false, webhookError{err: fmt.Errorf("failed to check for duplicate alert: %w", err)}
 	}
 	if v != "" {
 		return true, nil
@@ -93,11 +105,11 @@ func (w *webhook) checkDupAndLock(ctx context.Context, alert *types.Alertmanager
 
 	didLock, err := w.db.Lock(ctx, alert.MessageDedupKey(), timeoutLock)
 	if err != nil {
-		return false, fmt.Errorf("failed to lock alert: %w", err)
+		return false, webhookError{err: fmt.Errorf("failed to lock alert: %w", err)}
 	}
 	if !didLock {
 		// another instance is about to publish
-		return true, ErrAlreadyLocked
+		return true, webhookError{err: ErrAlreadyLocked}
 	}
 
 	return false, nil

@@ -15,7 +15,12 @@ type Publisher interface {
 		source string,
 		alert *types.AlertmanagerAlert,
 		previous Results,
-	) (Metadata, error)
+	) (Metadata, PublisherError)
+}
+
+type PublisherError interface {
+	error
+	IsReportable() bool
 }
 
 type Metadata map[string]any

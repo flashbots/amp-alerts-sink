@@ -20,6 +20,18 @@ type stubPublisher struct {
 	calls []types.AlertmanagerAlert
 }
 
+type stubPublisherError struct {
+	err error
+}
+
+func (err stubPublisherError) Error() string {
+	return err.err.Error()
+}
+
+func (err stubPublisherError) IsReportable() bool {
+	return false
+}
+
 func (s *stubPublisher) Name() string {
 	return "stub"
 }
@@ -28,9 +40,9 @@ func (s *stubPublisher) Publish(
 	_ context.Context, _ string,
 	alert *types.AlertmanagerAlert,
 	_ publisher.Results,
-) (publisher.Metadata, error) {
+) (publisher.Metadata, publisher.PublisherError) {
 	s.calls = append(s.calls, *alert)
-	return nil, s.err
+	return nil, stubPublisherError{err: s.err}
 }
 
 func newTestProcessor(pub publisher.Publisher) *Processor {

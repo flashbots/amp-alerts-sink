@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/flashbots/amp-alerts-sink/publisher"
 	"github.com/flashbots/amp-alerts-sink/types"
 
 	"go.uber.org/zap"
@@ -58,7 +59,10 @@ func (p *Processor) ProcessSnsEvent(ctx context.Context, event events.SNSEvent) 
 			}},
 		}
 		if err := p.processMessage(ctx, "amp-alerts-sink", alert); err != nil {
-			l.Error("Failed to send parse error alert", zap.Error(err))
+			var publisherErr publisher.PublisherError
+			if errors.As(err, &publisherErr) && publisherErr.IsReportable() {
+				l.Error("Failed to send parse-error alert", zap.Error(err))
+			}
 		}
 	}
 	return errors.Join(errs...)

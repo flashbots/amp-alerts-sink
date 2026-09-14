@@ -25,6 +25,18 @@ type a2aSender interface {
 	SendMessage(context.Context, *a2a.SendMessageRequest) (a2a.SendMessageResult, error)
 }
 
+type a2aError struct {
+	err error
+}
+
+func (err a2aError) Error() string {
+	return err.err.Error()
+}
+
+func (err a2aError) IsReportable() bool {
+	return false
+}
+
 type a2aClientFactory func(context.Context, string, string) (a2aSender, error)
 
 type a2aPublisher struct {
@@ -78,7 +90,7 @@ func (p *a2aPublisher) Publish(
 	source string,
 	alert *types.AlertmanagerAlert,
 	previousPublishers Results,
-) (Metadata, error) {
+) (Metadata, PublisherError) {
 	l := logutils.LoggerFromContext(ctx)
 
 	for dependency, result := range previousPublishers {
@@ -86,7 +98,7 @@ func (p *a2aPublisher) Publish(
 			l.Info("Previous publisher is not finished yet",
 				zap.String("dependency", dependency),
 			)
-			return Metadata{"waiting_for": dependency}, ErrAlreadyLocked
+			return Metadata{"waiting_for": dependency}, a2aError{err: ErrAlreadyLocked}
 		}
 	}
 
@@ -106,11 +118,11 @@ func (p *a2aPublisher) Publish(
 		// A non-nil err here is always ErrAlreadyLocked, which the processor
 		// now handles as a harmless duplicate (an HA peer will publish it).
 		l.Info("Duplicate alert detected", zap.Error(err))
-		return metadata, err
+		return metadata, a2aError{err: err}
 	}
 	if err != nil {
 		l.Error("Failed to check for duplicate alert, refusing to prompt a2a", zap.Error(err))
-		return nil, err
+		return nil, a2aError{err: err}
 	}
 
 	// not a duplicate
@@ -122,12 +134,12 @@ func (p *a2aPublisher) Publish(
 	}
 	prompt, err := p.renderPrompt(details)
 	if err != nil {
-		return nil, err
+		return nil, a2aError{err: err}
 	}
 
 	client, err := p.getClient(ctx)
 	if err != nil {
-		return nil, err
+		return nil, a2aError{err: err}
 	}
 
 	dataPart := a2a.NewDataPart(details)
@@ -148,7 +160,7 @@ func (p *a2aPublisher) Publish(
 	response, err := client.SendMessage(ctx, &a2a.SendMessageRequest{Message: message})
 	if err != nil {
 		p.clearClient()
-		return nil, fmt.Errorf("failed to send A2A message: %w", err)
+		return nil, a2aError{err: fmt.Errorf("failed to send A2A message: %w", err)}
 	}
 
 	metadata := a2aResponseMetadata(response)
