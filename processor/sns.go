@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -41,6 +42,15 @@ func (p *Processor) ProcessSnsEvent(ctx context.Context, event events.SNSEvent) 
 			errs = append(errs, err)
 		}
 	}
+
+	// remove non-reportable errors
+	errs = slices.DeleteFunc(errs, func(err error) bool {
+		var publisherErr publisher.PublisherError
+		if errors.As(err, &publisherErr) && publisherErr.IsReportable() {
+			return false
+		}
+		return true
+	})
 
 	if len(errs) > 0 {
 		alert := &types.AlertmanagerMessage{

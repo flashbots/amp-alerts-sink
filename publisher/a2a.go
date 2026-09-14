@@ -250,6 +250,13 @@ func newA2AClient(ctx context.Context, agentURL, bearerToken string) (a2aSender,
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve A2A agent card: %w", err)
 	}
+
+	// some agent cards (e.g. kagent) advertise internal/cluster-local URLs in
+	// their supported interfaces instead of public URL they were resolved from
+	for _, iface := range card.SupportedInterfaces {
+		iface.URL = agentURL
+	}
+
 	client, err := a2aclient.NewFromCard(ctx, card)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create A2A client: %w", err)
