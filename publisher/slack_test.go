@@ -76,7 +76,7 @@ func TestSlackOpeningAlert(t *testing.T) {
 	alert := alertFiring
 
 	defer func() {
-		err := p.Publish(ctx, "testSource", alert)
+		_, err := p.Publish(ctx, "testSource", alert, nil)
 		assert.NoError(t, err)
 	}()
 
@@ -129,7 +129,7 @@ func TestSlackFollowUpAlert(t *testing.T) {
 	alert := alertFiring
 
 	defer func() {
-		err := p.Publish(ctx, "testSource", alert)
+		_, err := p.Publish(ctx, "testSource", alert, nil)
 		assert.NoError(t, err)
 	}()
 
@@ -179,7 +179,7 @@ func TestSlackResolvingAlert(t *testing.T) {
 	alert := alertResolved
 
 	defer func() {
-		err := p.Publish(ctx, "testSource", alert)
+		_, err := p.Publish(ctx, "testSource", alert, nil)
 		assert.NoError(t, err)
 	}()
 
@@ -229,7 +229,7 @@ func TestSlackDuplicateAlert(t *testing.T) {
 	alert := alertFiring
 
 	defer func() {
-		err := p.Publish(ctx, "testSource", alert)
+		_, err := p.Publish(ctx, "testSource", alert, nil)
 		assert.NoError(t, err)
 	}()
 
@@ -237,4 +237,19 @@ func TestSlackDuplicateAlert(t *testing.T) {
 		Get(ctx, "testSource/testChannelID/"+alert.MessageDedupKey()).
 		Return("testMessageTX", nil) // duplicate alert
 
+}
+
+func TestSlackDuplicateAlertReturnsPublisherMetadata(t *testing.T) {
+	p, db, _ := setupSlackPublisher(t)
+	ctx := context.Background()
+	alert := alertFiring
+
+	db.EXPECT().
+		Get(ctx, "testSource/testChannelID/"+alert.MessageDedupKey()).
+		Return("testMessageTS", nil)
+
+	metadata, err := p.Publish(ctx, "testSource", alert, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "testChannelID", metadata["channel_id"])
+	assert.Equal(t, "testMessageTS", metadata["message_ts"])
 }

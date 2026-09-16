@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"maps"
 	"time"
 
 	"github.com/flashbots/amp-alerts-sink/config"
@@ -32,7 +33,7 @@ type Processor struct {
 }
 
 func New(cfg *config.Config) (*Processor, error) {
-	db, err := db.New(cfg.DynamoDB)
+	database, err := db.New(cfg.DynamoDB)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +42,7 @@ func New(cfg *config.Config) (*Processor, error) {
 	if cfg.Slack.Enabled() {
 		slack, err := publisher.NewSlackChannel(
 			cfg.Slack,
-			db.WithNamespace("slack-"+cfg.Slack.Channel.ID),
+			database.WithNamespace("slack-"+cfg.Slack.Channel.ID),
 		)
 		if err != nil {
 			return nil, err
@@ -58,8 +59,22 @@ func New(cfg *config.Config) (*Processor, error) {
 
 		publishers = append(publishers, publisher.NewWebhook(
 			cfg.Webhook,
-			db.WithNamespace("webhook-"+hex.EncodeToString(urlHash[:])),
+			database.WithNamespace("webhook-"+hex.EncodeToString(urlHash[:])),
 		))
+	}
+
+	// NOTE: a2a must be added in the end of the list so that it can consume
+	//       publish metadata from all other publishers
+	if cfg.A2A.Enabled() {
+		urlHash := sha256.Sum256([]byte(cfg.A2A.PromptUrl))
+		a2aPublisher, err := publisher.NewA2A(
+			cfg.A2A,
+			database.WithNamespace("a2a-"+hex.EncodeToString(urlHash[:])),
+		)
+		if err != nil {
+			return nil, err
+		}
+		publishers = append(publishers, a2aPublisher)
 	}
 
 	if len(publishers) == 0 {
@@ -138,13 +153,34 @@ func (p *Processor) processMessage(
 			alert.StartsAt = _timestamp.Format(timeFormatGrafana)
 		}
 
-		// publish
+		// publish sequentially and collect results
+		results := publisher.PublishResults{}
 		for _, pub := range p.publishers {
-			if err := pub.Publish(ctx, source, &alert); err != nil {
+			var metadata publisher.PublishMetadata
+			var err error
+
+			metadata, err = pub.Publish(
+				ctx,
+				source,
+				&alert,
+				maps.Clone(results),
+			)
+			result := publisher.Result{Metadata: metadata}
+			if err == nil {
+				result.Status = publisher.ResultStatusSucceeded
+			} else if errors.Is(err, publisher.ErrAlreadyPublishing) {
+				result.Status = publisher.ResultStatusAlreadyLocked
+			} else {
+				result.Status = publisher.ResultStatusFailed
+				result.Error = err.Error()
+			}
+			results[pub.Name()] = result
+
+			if err != nil {
 				// Losing the dedup lock race just means an HA peer got there
 				// first and is publishing this alert for us. Nothing went
 				// wrong, so skip it quietly instead of failing and alerting.
-				if errors.Is(err, publisher.ErrAlreadyLocked) {
+				if errors.Is(err, publisher.ErrAlreadyPublishing) {
 					l.Debug("Skipped publishing; another instance holds the dedup lock")
 					continue
 				}

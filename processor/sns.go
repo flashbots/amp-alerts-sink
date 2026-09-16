@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/flashbots/amp-alerts-sink/publisher"
 	"github.com/flashbots/amp-alerts-sink/types"
 
 	"go.uber.org/zap"
@@ -41,24 +43,36 @@ func (p *Processor) ProcessSnsEvent(ctx context.Context, event events.SNSEvent) 
 		}
 	}
 
+	// remove non-reportable errors
+	errs = slices.DeleteFunc(errs, func(err error) bool {
+		var publisherErr publisher.PublisherError
+		if errors.As(err, &publisherErr) && !publisherErr.IsReportable() {
+			return true
+		}
+		return false
+	})
+
 	if len(errs) > 0 {
 		alert := &types.AlertmanagerMessage{
 			Alerts: []types.AlertmanagerAlert{{
 				Status:   "firing",
 				StartsAt: time.Now().UTC().Format(timeFormatPrometheus),
 				Labels: map[string]string{
-					"alertname": "AMPAlertsSinkParseError",
+					"alertname": "AMPAlertsSinkPublishError",
 					"severity":  "critical",
 				},
 				Annotations: map[string]string{
-					"summary": "Failed to parse SNS messages",
+					"summary": "Failed to publish alert(s)",
 					"description": "amp-alerts-sink failed to process some alerts. " +
 						"Check Lambda logs for more details.",
 				},
 			}},
 		}
 		if err := p.processMessage(ctx, "amp-alerts-sink", alert); err != nil {
-			l.Error("Failed to send parse error alert", zap.Error(err))
+			var publisherErr publisher.PublisherError
+			if errors.As(err, &publisherErr) && publisherErr.IsReportable() {
+				l.Error("Failed to publish AMPAlertsSinkPublishError alert", zap.Error(err))
+			}
 		}
 	}
 	return errors.Join(errs...)

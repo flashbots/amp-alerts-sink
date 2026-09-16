@@ -4,6 +4,7 @@ package publisher
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -33,21 +34,50 @@ type pagerDuty struct {
 	client         pagerDutyClient
 }
 
+type pagerDutyError struct {
+	err error
+}
+
+func newPagerDutyError(err error) pagerDutyError {
+	res := pagerDutyError{}
+	if errors.As(err, &res) {
+		return res
+	}
+	return pagerDutyError{err: err}
+}
+
+func (err pagerDutyError) Error() string {
+	return err.err.Error()
+}
+
+func (err pagerDutyError) Unwrap() error {
+	return err.err
+}
+
+func (err pagerDutyError) IsReportable() bool {
+	return true
+}
+
 type pagerDutyClient interface {
 	ManageEventWithContext(context.Context, *pagerduty.V2Event) (*pagerduty.V2EventResponse, error)
 	LastAPIResponse() (*http.Response, bool)
+}
+
+func (p pagerDuty) Name() string {
+	return NamePagerDuty
 }
 
 func (p pagerDuty) Publish(
 	ctx context.Context,
 	source string,
 	alert *types.AlertmanagerAlert,
-) (err error) {
+	_ PublishResults,
+) (metadata PublishMetadata, publisherErr PublisherError) {
 	l := logutils.LoggerFromContext(ctx)
 
 	defer func() {
-		if err != nil {
-			l.Error("Failed to publish alert to pagerduty", zap.Error(err))
+		if publisherErr != nil {
+			l.Error("Failed to publish alert to pagerduty", zap.Error(publisherErr))
 
 			errResp, ok := p.client.LastAPIResponse()
 			if ok && errResp != nil {
@@ -69,7 +99,7 @@ func (p pagerDuty) Publish(
 			// to notify that something is wrong.
 			// Not including dedup_key so to spawn a new incident.
 
-			errStr := err.Error()
+			errStr := publisherErr.Error()
 			if len(errStr) > 1024 {
 				errStr = errStr[:1024] // so that we don't accidentally exceed the size limit
 			}
@@ -180,11 +210,22 @@ func (p pagerDuty) Publish(
 	)
 	resp, err := p.client.ManageEventWithContext(ctx, event)
 	if err != nil {
-		return err
+		return nil, newPagerDutyError(err)
+	}
+	metadata = PublishMetadata{
+		"dedup_key": resp.DedupKey,
+		"message":   resp.Message,
+		"status":    resp.Status,
 	}
 	if len(resp.Errors) > 0 {
-		return fmt.Errorf("pagerduty: %v", resp.Errors)
+		return metadata, newPagerDutyError(fmt.Errorf("pagerduty: %v", resp.Errors))
 	}
-	l.Info("Successfully published to pagerduty")
-	return nil
+
+	l.Info("Successfully published to pagerduty",
+		zap.Any("alert", alert),
+		zap.Any("event", event),
+		zap.Any("metadata", metadata),
+	)
+
+	return metadata, nil
 }

@@ -20,9 +20,41 @@ type stubPublisher struct {
 	calls []types.AlertmanagerAlert
 }
 
-func (s *stubPublisher) Publish(_ context.Context, _ string, alert *types.AlertmanagerAlert) error {
+type stubPublisherError struct {
+	err error
+}
+
+func newStubPublisherError(err error) stubPublisherError {
+	res := stubPublisherError{}
+	if errors.As(err, &res) {
+		return res
+	}
+	return stubPublisherError{err: err}
+}
+
+func (err stubPublisherError) Error() string {
+	return err.err.Error()
+}
+
+func (err stubPublisherError) Unwrap() error {
+	return err.err
+}
+
+func (err stubPublisherError) IsReportable() bool {
+	return true
+}
+
+func (s *stubPublisher) Name() string {
+	return "stub"
+}
+
+func (s *stubPublisher) Publish(
+	_ context.Context, _ string,
+	alert *types.AlertmanagerAlert,
+	_ publisher.PublishResults,
+) (publisher.PublishMetadata, publisher.PublisherError) {
 	s.calls = append(s.calls, *alert)
-	return s.err
+	return nil, newStubPublisherError(s.err)
 }
 
 func newTestProcessor(pub publisher.Publisher) *Processor {
@@ -54,7 +86,7 @@ func snsEventWithAlert(t *testing.T) events.SNSEvent {
 // ErrAlreadyLocked. That's a normal, harmless outcome: the invocation should
 // still succeed and no AMPAlertsSinkParseError alert should go out.
 func TestProcessSnsEvent_AlreadyLockedSucceeds(t *testing.T) {
-	pub := &stubPublisher{err: publisher.ErrAlreadyLocked}
+	pub := &stubPublisher{err: publisher.ErrAlreadyPublishing}
 	p := newTestProcessor(pub)
 
 	err := p.ProcessSnsEvent(context.Background(), snsEventWithAlert(t))

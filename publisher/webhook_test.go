@@ -82,7 +82,7 @@ func TestWebhookSuccessfulPublish(t *testing.T) {
 		Set(ctx, alert.MessageDedupKey(), timeoutWebhookExpiry, "1").
 		Return(nil)
 
-	err := p.Publish(ctx, "testSource", alert)
+	_, err := p.Publish(ctx, "testSource", alert, nil)
 	assert.NoError(t, err)
 }
 
@@ -139,7 +139,7 @@ func TestWebhookWithoutBody(t *testing.T) {
 		Set(ctx, alert.MessageDedupKey(), timeoutWebhookExpiry, "1").
 		Return(nil)
 
-	err := wh.Publish(ctx, "testSource", alert)
+	_, err := wh.Publish(ctx, "testSource", alert, nil)
 	assert.NoError(t, err)
 }
 
@@ -153,7 +153,7 @@ func TestWebhookDuplicateAlert(t *testing.T) {
 		Get(ctx, alert.MessageDedupKey()).
 		Return("1", nil)
 
-	err := p.Publish(ctx, "testSource", alert)
+	_, err := p.Publish(ctx, "testSource", alert, nil)
 	assert.NoError(t, err)
 }
 
@@ -172,8 +172,8 @@ func TestWebhookAlreadyLocked(t *testing.T) {
 		Lock(ctx, alert.MessageDedupKey(), timeoutLock).
 		Return(false, nil)
 
-	err := p.Publish(ctx, "testSource", alert)
-	assert.Equal(t, ErrAlreadyLocked, err)
+	_, err := p.Publish(ctx, "testSource", alert, nil)
+	assert.Equal(t, ErrAlreadyPublishing.Error(), err.Error())
 }
 
 func TestWebhookHTTPError(t *testing.T) {
@@ -199,7 +199,7 @@ func TestWebhookHTTPError(t *testing.T) {
 			Body:       io.NopCloser(bytes.NewBufferString(`{"error": "internal server error"}`)),
 		}, nil)
 
-	err := p.Publish(ctx, "testSource", alert)
+	_, err := p.Publish(ctx, "testSource", alert, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "webhook returned status 500")
 }
@@ -224,7 +224,7 @@ func TestWebhookNetworkError(t *testing.T) {
 		Do(gomock.Any()).
 		Return(nil, assert.AnError)
 
-	err := p.Publish(ctx, "testSource", alert)
+	_, err := p.Publish(ctx, "testSource", alert, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "webhook request failed")
 }
@@ -281,7 +281,7 @@ func TestWebhookDifferentMethods(t *testing.T) {
 				Set(ctx, alert.MessageDedupKey(), timeoutWebhookExpiry, "1").
 				Return(nil)
 
-			err := wh.Publish(ctx, "testSource", alert)
+			_, err := wh.Publish(ctx, "testSource", alert, nil)
 			assert.NoError(t, err)
 		})
 	}
@@ -342,7 +342,7 @@ func TestWebhookResolvingAlert(t *testing.T) {
 		Set(ctx, alert.MessageDedupKey(), timeoutWebhookExpiry, "1").
 		Return(nil)
 
-	err := p.Publish(ctx, "testSource", alert)
+	_, err := p.Publish(ctx, "testSource", alert, nil)
 	assert.NoError(t, err)
 }
 
@@ -369,6 +369,6 @@ func TestWebhookDBErrorContinuesWithSend(t *testing.T) {
 		Set(ctx, alert.MessageDedupKey(), timeoutWebhookExpiry, "1").
 		Return(nil)
 
-	err := p.Publish(ctx, "testSource", alert)
+	_, err := p.Publish(ctx, "testSource", alert, nil)
 	assert.NoError(t, err)
 }

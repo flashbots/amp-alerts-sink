@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/flashbots/amp-alerts-sink/config"
 	"github.com/flashbots/amp-alerts-sink/processor"
@@ -17,6 +18,8 @@ import (
 const (
 	categoryDynamoDB  = "DYNAMO DB:"
 	categoryProcessor = "PROCESSOR:"
+
+	categoryA2A       = "PUBLISHER A2A:"
 	categorySlack     = "PUBLISHER SLACK:"
 	categoryPagerDuty = "PUBLISHER PAGERDUTY:"
 	categoryWebhook   = "PUBLISHER WEBHOOK:"
@@ -30,18 +33,23 @@ var (
 func CommandLambda(cfg *config.Config) *cli.Command {
 	envPrefixDynamoDB := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(categoryDynamoDB, " ", "_"), ":", "")) + "_"
 	envPrefixProcessor := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(categoryProcessor, " ", "_"), ":", "")) + "_"
+
+	envPrefixA2A := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(categoryA2A, " ", "_"), ":", "")) + "_"
 	envPrefixSlack := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(categorySlack, " ", "_"), ":", "")) + "_"
 	envPrefixPagerDuty := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(categoryPagerDuty, " ", "_"), ":", "")) + "_"
 	envPrefixWebhook := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(categoryWebhook, " ", "_"), ":", "")) + "_"
 
 	cliPrefixDynamoDB := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(categoryDynamoDB, " ", "-"), ":", "")) + "-"
 	cliPrefixProcessor := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(categoryProcessor, " ", "-"), ":", "")) + "-"
+
+	cliPrefixA2A := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(categoryA2A, " ", "-"), ":", "")) + "-"
 	cliPrefixSlack := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(categorySlack, " ", "-"), ":", "")) + "-"
 	cliPrefixPagerDuty := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(categoryPagerDuty, " ", "-"), ":", "")) + "-"
 	cliPrefixWebhook := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(categoryWebhook, " ", "-"), ":", "")) + "-"
 
-	envSlackToken := envPrefix + envPrefixSlack + "TOKEN"
+	envA2ABearerToken := envPrefix + envPrefixA2A + "BEARER_TOKEN"
 	envPagerDutyIntegrationKey := envPrefix + envPrefixPagerDuty + "INTEGRATION_KEY"
+	envSlackToken := envPrefix + envPrefixSlack + "TOKEN"
 	envWebhookURL := envPrefix + envPrefixWebhook + "URL"
 
 	rawProcessorIgnoreRules := &cli.StringSlice{}
@@ -94,6 +102,42 @@ func CommandLambda(cfg *config.Config) *cli.Command {
 		},
 	}
 
+	flagsA2A := []cli.Flag{
+		&cli.StringFlag{
+			Category:    categoryA2A,
+			Destination: &cfg.A2A.BearerToken,
+			EnvVars:     []string{envA2ABearerToken},
+			Name:        cliPrefixA2A + "bearer-token",
+			Usage:       "optional bearer `token` (either raw token, or ARN of secret manager)",
+		},
+
+		&cli.StringFlag{
+			Category:    categoryA2A,
+			Destination: &cfg.A2A.PromptTemplate,
+			EnvVars:     []string{envPrefix + envPrefixA2A + "PROMPT_TEMPLATE"},
+			Name:        cliPrefixA2A + "prompt-template",
+			Usage:       "go `template` used to render the agent prompt",
+			Value:       config.DefaultA2APrompt,
+		},
+
+		&cli.StringFlag{
+			Category:    categoryA2A,
+			Destination: &cfg.A2A.PromptUrl,
+			EnvVars:     []string{envPrefix + envPrefixA2A + "PROMPT_URL"},
+			Name:        cliPrefixA2A + "prompt-url",
+			Usage:       "base a2a `URL` of the agent",
+		},
+
+		&cli.DurationFlag{
+			Category:    categoryA2A,
+			Destination: &cfg.A2A.Timeout,
+			EnvVars:     []string{envPrefix + envPrefixA2A + "TIMEOUT"},
+			Name:        cliPrefixA2A + "timeout",
+			Usage:       "a2a messages timeout",
+			Value:       30 * time.Second,
+		},
+	}
+
 	flagsPagerDuty := []cli.Flag{
 		&cli.StringFlag{
 			Category:    categoryPagerDuty,
@@ -135,8 +179,9 @@ func CommandLambda(cfg *config.Config) *cli.Command {
 	flags := slices.Concat(
 		flagsDB,
 		flagsProcessor,
-		flagsSlack,
+		flagsA2A,
 		flagsPagerDuty,
+		flagsSlack,
 		flagsWebhook,
 	)
 
@@ -148,25 +193,36 @@ func CommandLambda(cfg *config.Config) *cli.Command {
 		Before: func(_ *cli.Context) error {
 			var err error
 
+			cfg.A2A.BearerToken, err = stringOrLoadFromSecretsmanager(
+				cfg.A2A.BearerToken, envA2ABearerToken,
+			)
+			if err != nil {
+				return err
+			}
+
+			cfg.PagerDuty.IntegrationKey, err = stringOrLoadFromSecretsmanager(
+				cfg.PagerDuty.IntegrationKey, envPagerDutyIntegrationKey,
+			)
+			if err != nil {
+				return err
+			}
+
 			if cfg.Slack.Token != "" {
 				if cfg.Slack.Channel.ID == "" {
 					return errSlackChannelIDNotConfigured
 				}
 
-				cfg.Slack.Token, err = stringOrLoadFromSecretsmanager(cfg.Slack.Token, envSlackToken)
+				cfg.Slack.Token, err = stringOrLoadFromSecretsmanager(
+					cfg.Slack.Token, envSlackToken,
+				)
 				if err != nil {
 					return err
 				}
 			}
 
-			cfg.PagerDuty.IntegrationKey, err = stringOrLoadFromSecretsmanager(
-				cfg.PagerDuty.IntegrationKey, envPagerDutyIntegrationKey)
-			if err != nil {
-				return err
-			}
-
 			cfg.Webhook.URL, err = stringOrLoadFromSecretsmanager(
-				cfg.Webhook.URL, envWebhookURL)
+				cfg.Webhook.URL, envWebhookURL,
+			)
 			if err != nil {
 				return err
 			}
