@@ -87,10 +87,10 @@ func NewA2A(cfg *config.A2A, database db.DB) (Publisher, error) {
 	return &a2aPublisher{
 		agentURL:      cfg.PromptUrl,
 		bearerToken:   cfg.BearerToken,
-		timeout:       cfg.Timeout,
-		prompt:        prompt,
-		db:            database,
 		clientFactory: newA2AClient,
+		db:            database,
+		prompt:        prompt,
+		timeout:       cfg.Timeout,
 	}, nil
 }
 
@@ -174,7 +174,10 @@ func (p *a2aPublisher) Publish(
 		})
 	}
 
-	response, err := client.SendMessage(ctx, &a2a.SendMessageRequest{Message: message})
+	response, err := client.SendMessage(ctx, &a2a.SendMessageRequest{
+		Config:  &a2a.SendMessageConfig{ReturnImmediately: true},
+		Message: message,
+	})
 	if err != nil {
 		p.clearClient()
 		l.Warn("Failed to prompt A2A agent",
