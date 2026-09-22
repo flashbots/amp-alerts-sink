@@ -156,11 +156,13 @@ func (p *a2aPublisher) Publish(
 	}
 	prompt, err := p.renderPrompt(details)
 	if err != nil {
+		l.Error("Failed to render a2a prompt", zap.Error(err))
 		return nil, newA2aError(err)
 	}
 
 	client, err := p.getClient(ctx)
 	if err != nil {
+		l.Error("Failed to initialise a2a client", zap.Error(err))
 		return nil, newA2aError(err)
 	}
 
@@ -180,7 +182,7 @@ func (p *a2aPublisher) Publish(
 	})
 	if err != nil {
 		p.clearClient()
-		l.Warn("Failed to prompt A2A agent",
+		l.Error("Failed to prompt A2A agent",
 			zap.Error(err),
 			zap.String("agent_url", p.agentURL),
 			zap.String("message_id", message.ID),
